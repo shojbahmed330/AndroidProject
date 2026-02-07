@@ -112,7 +112,11 @@ const AuthPage: React.FC<{ onLoginSuccess: (user: UserType) => void, initialUpda
       }
 
       const userData = await db.getUser(formData.email, res.data.user?.id);
-      if (userData) onLoginSuccess(userData);
+      if (userData) {
+        onLoginSuccess(userData);
+      } else {
+        throw new Error("ইউজার ডাটা পাওয়া যায়নি।");
+      }
     } catch (error: any) {
       alert(error.message || "Authentication Failed");
     } finally {
@@ -156,11 +160,10 @@ const AuthPage: React.FC<{ onLoginSuccess: (user: UserType) => void, initialUpda
       const { error } = await db.updatePassword(formData.password);
       if (error) throw error;
       
-      // পাসওয়ার্ড আপডেটের পর সেশন ক্লিয়ার করে ফ্রেশ লগইন করানো ভালো
       await db.signOut();
       alert("পাসওয়ার্ড সফলভাবে পরিবর্তন হয়েছে। এখন আপনার নতুন পাসওয়ার্ড দিয়ে লগইন করুন।");
       setIsUpdatingPassword(false);
-      window.location.hash = ''; // ক্লিনিং রিকভারি হ্যাশ
+      window.location.hash = ''; 
     } catch (error: any) {
       alert(error.message || "পাসওয়ার্ড আপডেট করতে সমস্যা হয়েছে।");
     } finally {
@@ -173,7 +176,6 @@ const AuthPage: React.FC<{ onLoginSuccess: (user: UserType) => void, initialUpda
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-blue-900/20 via-transparent to-transparent opacity-50"></div>
       <div className="relative w-full max-w-[400px] h-[520px] md:h-[580px] [perspective:1200px] animate-in fade-in zoom-in-95 duration-500 mt-2 md:mt-0">
         <div className={`relative w-full h-full transition-transform duration-1000 [transform-style:preserve-3d] ${isRegister ? '[transform:rotateY(-90deg)]' : ''}`}>
-          {/* Login, Reset & Update Face */}
           <div className="absolute inset-0 [backface-visibility:hidden] bg-white/5 backdrop-blur-xl border border-white/10 rounded-[2rem] md:rounded-[2.5rem] p-6 md:p-10 flex flex-col justify-center shadow-2xl [transform:translateZ(150px)] md:[transform:translateZ(200px)]">
             {isUpdatingPassword ? (
               <div className="space-y-6">
@@ -253,7 +255,6 @@ const AuthPage: React.FC<{ onLoginSuccess: (user: UserType) => void, initialUpda
               </div>
             )}
           </div>
-          {/* Register Face */}
           <div className="absolute inset-0 [backface-visibility:hidden] bg-blue-600/10 backdrop-blur-xl border border-blue-500/20 rounded-[2rem] md:rounded-[2.5rem] p-6 md:p-10 flex flex-col justify-center shadow-2xl [transform:rotateY(90deg)_translateZ(150px)] md:[transform:rotateY(90deg)_translateZ(200px)]">
             <h2 className="text-2xl md:text-3xl font-black mb-8 tracking-tight text-cyan-400">New <span className="text-white">Registry</span></h2>
             <form onSubmit={handleAuth} className="space-y-4">
@@ -297,7 +298,6 @@ const App: React.FC = () => {
   const qrRef = useRef<HTMLDivElement>(null);
   const db = DatabaseService.getInstance();
 
-  // Basic Routing Effect
   useEffect(() => {
     const handleLocationChange = () => {
       setPath(window.location.pathname);
@@ -306,22 +306,19 @@ const App: React.FC = () => {
     return () => window.removeEventListener('popstate', handleLocationChange);
   }, []);
 
-  // Auth Sync
   useEffect(() => {
     const checkAuth = async () => {
       const session = await db.getCurrentSession();
       if (session?.user) {
-        // রিকভারি মোডে থাকলে ড্যাশবোর্ডে পাঠাবো না
-        const isRecovery = window.location.hash.includes('type=recovery') || window.location.pathname === '/update-password';
-        
+        const isRecovery = window.location.hash.includes('type=recovery') || path === '/update-password';
         const userData = await db.getUser(session.user.email || '');
         if (userData && !isRecovery) {
           setUser(userData);
-          if (window.location.pathname === '/login') {
+          if (path === '/login') {
             navigate('/dashboard');
           }
         }
-      } else if (window.location.pathname === '/dashboard') {
+      } else if (path === '/dashboard') {
         navigate('/login');
       }
     };
@@ -329,7 +326,12 @@ const App: React.FC = () => {
   }, [path]);
 
   const navigate = (to: string) => {
-    window.history.pushState({}, '', to);
+    try {
+      // Security fix: wrap pushState in try-catch for restricted environments
+      window.history.pushState({}, '', to);
+    } catch (e) {
+      console.warn("Navigation warning: History API restricted, using local state navigation.");
+    }
     setPath(to);
   };
 
