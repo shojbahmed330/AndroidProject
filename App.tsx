@@ -87,46 +87,48 @@ const App: React.FC = () => {
         docContent = docContent + `<script>${js}</script>`;
       }
 
-      const doc = iframeRef.current.contentDocument || iframeRef.current.contentWindow?.document;
-      if (doc) {
-        doc.open();
-        doc.write(docContent);
-        doc.close();
-      }
+      try {
+        const doc = iframeRef.current.contentDocument || iframeRef.current.contentWindow?.document;
+        if (doc) {
+          doc.open();
+          doc.write(docContent);
+          doc.close();
+        }
+      } catch (e) {}
     }
   }, [projectFiles, mode]);
 
   useEffect(() => {
     const init = async () => {
-      let session = await db.getCurrentSession();
-      let userEmail = session?.user?.email;
-      
-      // Check for local bypass login
-      if (!userEmail) {
-        userEmail = localStorage.getItem('df_force_login') || undefined;
-      }
+      try {
+        let session = await db.getCurrentSession();
+        let userEmail = session?.user?.email || localStorage.getItem('df_force_login') || undefined;
 
-      if (userEmail) {
-        const u = await db.getUser(userEmail);
-        if (u) {
-          setUser(u);
-          if (u.isAdmin) setIsAdmin(true);
-          
-          if (messages.length === 0) {
-            setMessages([{
-              id: 'welcome',
-              role: 'assistant',
-              content: `স্বাগতম ${u.name}! আমি DroidForge AI। আপনার ড্রিম অ্যাপের আইডিয়াটি লিখুন।`,
-              choices: [
-                { label: "কন্টাক্টস অ্যাপ বানান", prompt: "Build a native contacts list manager app" },
-                { label: "ক্যামেরা ফিল্টার অ্যাপ", prompt: "Create a camera app with realtime filters" }
-              ],
-              timestamp: Date.now()
-            }]);
+        if (userEmail) {
+          const u = await db.getUser(userEmail);
+          if (u) {
+            setUser(u);
+            if (u.isAdmin) setIsAdmin(true);
+            
+            if (messages.length === 0) {
+              setMessages([{
+                id: 'welcome',
+                role: 'assistant',
+                content: `স্বাগতম ${u.name}! আমি DroidForge AI। আপনার ড্রিম অ্যাপের আইডিয়াটি লিখুন।`,
+                choices: [
+                  { label: "কন্টাক্টস অ্যাপ বানান", prompt: "Build a native contacts list manager app" },
+                  { label: "ক্যামেরা ফিল্টার অ্যাপ", prompt: "Create a camera app with realtime filters" }
+                ],
+                timestamp: Date.now()
+              }]);
+            }
           }
         }
+      } catch (e) {
+        console.error("Initialization error:", e);
+      } finally {
+        setIsAuthLoading(false);
       }
-      setIsAuthLoading(false);
     };
     init();
   }, []);
@@ -134,14 +136,19 @@ const App: React.FC = () => {
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     const { email, password } = authInput;
-    const { session, error } = isSignUp 
-      ? await db.signUp(email, password) 
-      : await db.signIn(email, password);
     
-    if (error && !session) {
-      alert("Authentication Error: " + error.message);
-    } else {
-      window.location.reload();
+    try {
+      const { session, error } = isSignUp 
+        ? await db.signUp(email, password) 
+        : await db.signIn(email, password);
+      
+      if (error && !session) {
+        alert("Authentication Error: " + error.message);
+      } else {
+        window.location.reload();
+      }
+    } catch (err) {
+      alert("System Busy. Please try again.");
     }
   };
 
