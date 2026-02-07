@@ -1,5 +1,5 @@
 {
-  "name": "DroidForge Pro Native Builder",
+  "name": "OneClick Studio Native Builder",
   "description": "AI-powered system for building hybrid Android apps with full hardware access.",
   "requestFramePermissions": [
     "camera",

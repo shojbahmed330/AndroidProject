@@ -98,8 +98,7 @@ export class DatabaseService {
           avatar_url: `https://api.dicebear.com/7.x/avataaars/svg?seed=Shojib`,
           tokens: 999,
           isLoggedIn: true,
-          payments: [],
-          activity: [],
+          // Fixed: Removed 'payments' and 'activity' as they are not defined in the User interface
           joinedAt: Date.now(),
           isAdmin: true
         };
@@ -134,8 +133,7 @@ export class DatabaseService {
           avatar_url: `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.email}`,
           tokens: user.tokens || 0,
           isLoggedIn: true,
-          payments: [],
-          activity: [],
+          // Fixed: Removed 'payments' and 'activity' as they are not defined in the User interface
           joinedAt: new Date(user.created_at || Date.now()).getTime(),
           isAdmin: cleanEmail === 'rajshahi.jibon@gmail.com' || cleanEmail === 'rajshahi.shojib@gmail.com'
         };

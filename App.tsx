@@ -1,257 +1,183 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { 
-  Send, Smartphone, Loader2, Zap, Cpu, LogOut, Check, Rocket,
-  Download, Globe, Activity, Terminal, ShieldAlert, Package, QrCode, AlertCircle, Key, Mail, ArrowLeft
+  Send, Smartphone, Loader2, Zap, Cpu, LogOut, Check, Rocket, Settings,
+  Download, Globe, Activity, Terminal, ShieldAlert, Package, QrCode, 
+  AlertCircle, Key, Mail, ArrowLeft, FileCode, ShoppingCart, User as UserIcon,
+  ChevronRight, Github, Save, Trash2, Square, Circle
 } from 'lucide-react';
-import { AppMode, ChatMessage, User as UserType } from './types';
+import { AppMode, ChatMessage, User as UserType, GithubConfig } from './types';
 import { GeminiService } from './services/geminiService';
 import { DatabaseService } from './services/dbService';
 
-type AuthView = 'signin' | 'signup' | 'forgot' | 'update';
+const DEFAULT_USER: UserType = {
+  id: 'dev-mode',
+  email: 'dev@oneclick.studio',
+  name: 'OneClick Developer',
+  avatar_url: 'https://api.dicebear.com/7.x/avataaars/svg?seed=OneClick',
+  tokens: 500,
+  isLoggedIn: true,
+  joinedAt: Date.now()
+};
 
 const App: React.FC = () => {
-  const db = DatabaseService.getInstance();
-  const [user, setUser] = useState<UserType | null>(null);
-  const [authView, setAuthView] = useState<AuthView>('signin');
-  const [authInput, setAuthInput] = useState({ email: '', password: '', newPassword: '' });
-  const [isAuthLoading, setIsAuthLoading] = useState(true);
-  const [authStatus, setAuthStatus] = useState<{ type: 'success' | 'error', msg: string } | null>(null);
-  
+  const [user, setUser] = useState<UserType>(DEFAULT_USER);
+  const [mode, setMode] = useState<AppMode>(AppMode.PREVIEW);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
-  const [mode, setMode] = useState<AppMode>(AppMode.PREVIEW);
   const [isGenerating, setIsGenerating] = useState(false);
   const [projectFiles, setProjectFiles] = useState<Record<string, string>>({
-    'index.html': '<html><body style="background:#020617;color:cyan;display:flex;align-items:center;justify-content:center;height:100vh;font-family:sans-serif;margin:0;"><div><h1 style="text-align:center;">DroidForge System Active</h1><p style="opacity:0.5;font-size:12px;text-align:center;">READY FOR NEURAL UPLINK</p></div></body></html>',
-    'styles.css': '',
-    'main.js': ''
+    'index.html': '<h1 style="color:cyan; text-align:center; padding:50px; font-family:sans-serif;">OneClick Studio Ready</h1>',
+    'main.js': '// Logic goes here'
   });
+  const [selectedFile, setSelectedFile] = useState('index.html');
+  const [github, setGithub] = useState<GithubConfig>({ token: '', repo: '', owner: '' });
+  const [selectedOptions, setSelectedOptions] = useState<string[]>([]);
   
   const gemini = useRef(new GeminiService());
-  const iframeRef = useRef<HTMLIFrameElement>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isGenerating]);
 
-  // Auth Initialization & Logic
   useEffect(() => {
-    const loadUserData = async (email: string, id?: string) => {
-      console.log("Synchronizing User Data...");
-      const u = await db.getUser(email, id);
-      if (u) {
-        setUser(u);
-        if (messages.length === 0) {
-          setMessages([{
-            id: 'welcome',
-            role: 'assistant',
-            content: `স্বাগতম ${u.name}! আমি DroidForge AI। আজ আপনার জন্য কি অ্যাপ তৈরি করব? নিচের ইনপুট বক্সে আপনার আইডিয়া লিখুন।`,
-            choices: [
-              { label: "কন্টাক্টস ম্যানেজার", prompt: "Build a native contacts manager app" },
-              { label: "স্মার্ট লাইট কন্ট্রোলার", prompt: "Create a smart light controller with native sensors" }
-            ],
-            timestamp: Date.now()
-          }]);
-        }
-        // Success: Clear auth params from URL
-        if (window.location.search.includes('code=') || window.location.hash.includes('access_token')) {
-          window.history.replaceState({}, document.title, window.location.origin);
-        }
-        setIsAuthLoading(false);
-      } else {
-        // Fallback: If user data couldn't be fetched, don't stay in loading forever
-        console.warn("User data fetch failed for:", email);
-        setIsAuthLoading(false);
-      }
-    };
-
-    const init = async () => {
-      try {
-        const session = await db.getCurrentSession();
-        const forceEmail = localStorage.getItem('df_force_login');
-        
-        if (window.location.pathname === '/update-password' || window.location.hash.includes('type=recovery')) {
-          setAuthView('update');
-        }
-
-        const email = session?.user?.email || forceEmail;
-        if (email) {
-          await loadUserData(email, session?.user?.id);
-        } else {
-          const hasParams = window.location.search.includes('code=') || window.location.hash.includes('access_token');
-          if (!hasParams) {
-            setIsAuthLoading(false);
-          }
-        }
-      } catch (e) {
-        console.error("Critical Init Failure:", e);
-        setIsAuthLoading(false);
-      }
-    };
-
-    const { data: { subscription } } = db.onAuthStateChange(async (event, session) => {
-      console.log("Auth Event:", event);
-      if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
-        if (session?.user?.email) {
-          await loadUserData(session.user.email, session.user.id);
-        }
-      } else if (event === 'SIGNED_OUT') {
-        setUser(null);
-        setIsAuthLoading(false);
-      }
-    });
-
-    init();
-    
-    // Safety fallback
-    const safety = setTimeout(() => setIsAuthLoading(false), 8000);
-    return () => {
-      subscription.unsubscribe();
-      clearTimeout(safety);
-    };
-  }, []);
-
-  const handleAuthSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setAuthStatus(null);
-    setIsAuthLoading(true);
-
-    try {
-      if (authView === 'signin') {
-        const { error } = await db.signIn(authInput.email, authInput.password);
-        if (error) {
-          setAuthStatus({ type: 'error', msg: error.message });
-          setIsAuthLoading(false);
-        }
-      } else if (authView === 'signup') {
-        const { error } = await db.signUp(authInput.email, authInput.password);
-        if (error) {
-          setAuthStatus({ type: 'error', msg: error.message });
-          setIsAuthLoading(false);
-        } else {
-          setAuthStatus({ type: 'success', msg: 'Registration successful! Check email.' });
-          setIsAuthLoading(false);
-        }
-      } else if (authView === 'forgot') {
-        const { error } = await db.resetPassword(authInput.email);
-        if (error) {
-          setAuthStatus({ type: 'error', msg: error.message });
-          setIsAuthLoading(false);
-        } else {
-          setAuthStatus({ type: 'success', msg: 'Recovery link sent.' });
-          setIsAuthLoading(false);
-        }
-      }
-    } catch (err) {
-      setAuthStatus({ type: 'error', msg: 'System error during auth.' });
-      setIsAuthLoading(false);
+    if (messages.length === 0) {
+      setMessages([{
+        id: 'start',
+        role: 'assistant',
+        content: 'স্বাগতম OneClick Studio-তে! আমি আপনার লিড অ্যাপ ডেভেলপার। আপনি কি ধরনের অ্যাপ তৈরি করতে চান? আপনার আইডিয়াটি বিস্তারিত লিখুন।',
+        timestamp: Date.now()
+      }]);
     }
-  };
+  }, []);
 
   const handleSend = async (customInput?: string) => {
     const text = customInput || input;
-    if (!text.trim() || isGenerating || !user) return;
-    setMessages(prev => [...prev, { id: Date.now().toString(), role: 'user', content: text, timestamp: Date.now() }]);
+    if (!text.trim() || isGenerating) return;
+
+    const userMsg: ChatMessage = { id: Date.now().toString(), role: 'user', content: text, timestamp: Date.now() };
+    setMessages(prev => [...prev, userMsg]);
     setInput('');
+    setSelectedOptions([]); // Reset selections after sending
     setIsGenerating(true);
+
     try {
-      const result = await gemini.current.generateWebsite(text, projectFiles, undefined, messages.slice(-5));
-      if (result.files) setProjectFiles(result.files);
-      setMessages(prev => [...prev, { id: (Date.now()+1).toString(), role: 'assistant', content: result.answer, choices: result.choices, timestamp: Date.now() }]);
-      const u = await db.useToken(user.id, user.email);
-      if (u) setUser(u);
-    } finally { setIsGenerating(false); }
+      const res = await gemini.current.generateWebsite(text, projectFiles, messages);
+      if (res.files) setProjectFiles(prev => ({ ...prev, ...res.files }));
+      
+      const assistantMsg: ChatMessage = {
+        id: (Date.now() + 1).toString(),
+        role: 'assistant',
+        content: res.answer,
+        timestamp: Date.now(),
+        inputType: res.inputType || 'text',
+        options: res.options,
+        choices: res.choices
+      };
+      setMessages(prev => [...prev, assistantMsg]);
+      setUser(prev => ({ ...prev, tokens: prev.tokens - 1 }));
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
-  if (isAuthLoading) return (
-    <div className="h-screen bg-[#020617] flex flex-col items-center justify-center">
-      <div className="relative w-16 h-16 mb-6">
-        <Cpu size={64} className="text-cyan-500 animate-pulse absolute inset-0"/>
-        <div className="absolute inset-0 blur-xl bg-cyan-500/20 animate-pulse rounded-full"></div>
-      </div>
-      <div className="text-cyan-500 font-black tracking-[0.4em] text-[10px] uppercase animate-pulse">Establishing Connection...</div>
-    </div>
-  );
-
-  if (!user) return (
-    <div className="h-screen bg-slate-950 flex items-center justify-center p-6 bg-grid font-['Plus_Jakarta_Sans']">
-      <div className="max-w-md w-full glass-card p-10 rounded-[3rem] border-white/10 text-center animate-in fade-in zoom-in-95 duration-500 shadow-[0_0_80px_-20px_rgba(6,182,212,0.1)]">
-        <div className="w-16 h-16 bg-cyan-500 rounded-2xl mx-auto flex items-center justify-center mb-6 shadow-2xl active-pulse">
-          <Cpu size={32} className="text-black"/>
-        </div>
-        
-        <h1 className="text-2xl font-black text-white uppercase tracking-tighter mb-1">DroidForge <span className="text-cyan-400">Pro</span></h1>
-        <p className="text-white/30 text-[9px] font-black uppercase tracking-[0.3em] mb-8">{authView === 'signin' ? 'Login Portal' : 'Access Registration'}</p>
-
-        {authStatus && (
-          <div className={`mb-6 p-4 rounded-2xl flex items-center gap-3 text-xs font-bold animate-in slide-in-from-top-4 ${authStatus.type === 'error' ? 'bg-red-500/10 text-red-400 border border-red-500/20' : 'bg-green-500/10 text-green-400 border border-green-500/20'}`}>
-            <AlertCircle size={16}/> {authStatus.msg}
-          </div>
-        )}
-
-        <form onSubmit={handleAuthSubmit} className="space-y-4">
-          <div className="relative">
-            <Mail className="absolute left-5 top-1/2 -translate-y-1/2 text-white/20" size={18}/>
-            <input required type="email" value={authInput.email} onChange={e => setAuthInput(p => ({...p, email: e.target.value}))} className="w-full bg-slate-900/50 border border-white/5 rounded-2xl p-4 pl-14 text-white outline-none focus:border-cyan-500/30 transition-all text-sm" placeholder="Email Address" />
-          </div>
-          
-          <div className="relative">
-            <Key className="absolute left-5 top-1/2 -translate-y-1/2 text-white/20" size={18}/>
-            <input required type="password" value={authInput.password} onChange={e => setAuthInput(p => ({...p, password: e.target.value}))} className="w-full bg-slate-900/50 border border-white/5 rounded-2xl p-4 pl-14 text-white outline-none focus:border-cyan-500/30 transition-all text-sm" placeholder="Password" />
-          </div>
-
-          <button type="submit" disabled={isAuthLoading} className="w-full py-4 bg-cyan-600 rounded-2xl font-black uppercase tracking-widest text-white shadow-xl hover:bg-cyan-500 transition-all flex items-center justify-center gap-2">
-            {authView === 'signin' ? 'Login' : 'Register'}
-          </button>
-        </form>
-
-        <div className="mt-8 space-y-4">
-          <button onClick={() => db.loginWithGoogle()} className="w-full py-3 bg-white/5 border border-white/5 rounded-2xl text-[11px] font-black uppercase tracking-widest flex items-center justify-center gap-3 hover:bg-white/10 transition-all">
-            <Globe size={16} className="text-cyan-400"/> Login With Google
-          </button>
-          <div className="flex justify-between items-center px-2">
-            <button onClick={() => setAuthView('signin')} className="text-white/20 text-[10px] font-black uppercase tracking-widest hover:text-white transition-colors">Login</button>
-            <button onClick={() => setAuthView('signup')} className="text-cyan-400 text-[10px] font-black hover:underline uppercase tracking-widest">Registration</button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
+  const toggleOption = (val: string, type: 'single' | 'multiple' | 'text' = 'text') => {
+    if (type === 'single') {
+      setSelectedOptions([val]);
+    } else if (type === 'multiple') {
+      setSelectedOptions(prev => prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val]);
+    }
+  };
 
   return (
-    <div className="h-screen flex flex-col font-['Hind_Siliguri'] overflow-hidden text-slate-100 bg-[#020617]">
-      <header className="h-20 border-b border-white/5 glass-card flex items-center justify-between px-10 z-50">
-        <div className="flex items-center gap-5">
-          <div className="w-11 h-11 bg-cyan-500 rounded-2xl flex items-center justify-center shadow-lg"><Cpu size={24} className="text-black"/></div>
-          <span className="font-black text-sm uppercase tracking-widest">DroidForge <span className="text-cyan-400">Pro</span></span>
+    <div className="h-screen flex flex-col font-['Hind_Siliguri'] text-slate-100 bg-[#020617] overflow-hidden">
+      {/* Header */}
+      <header className="h-20 border-b border-white/5 glass-card flex items-center justify-between px-8 z-50">
+        <div className="flex items-center gap-4">
+          <button onClick={() => setMode(AppMode.SETTINGS)} className="p-3 hover:bg-white/5 rounded-2xl transition-all text-slate-400 hover:text-cyan-400">
+            <Settings size={22}/>
+          </button>
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-cyan-500 rounded-xl flex items-center justify-center shadow-lg active-pulse">
+              <Cpu size={22} className="text-black"/>
+            </div>
+            <span className="font-black text-sm uppercase tracking-tighter">OneClick <span className="text-cyan-400">Studio</span></span>
+          </div>
         </div>
-        <nav className="flex bg-white/5 rounded-full p-1.5 border border-white/5">
+
+        <nav className="flex bg-slate-900/50 rounded-2xl p-1 border border-white/5">
           {[AppMode.PREVIEW, AppMode.EDIT, AppMode.SHOP, AppMode.PROFILE].map(m => (
-            <button key={m} onClick={() => setMode(m)} className={`px-8 py-2.5 text-[11px] font-black uppercase rounded-full transition-all ${mode === m ? 'bg-cyan-500 text-black shadow-lg' : 'text-white/40 hover:text-white'}`}>{m}</button>
+            <button key={m} onClick={() => setMode(m)} className={`px-6 py-2 text-[11px] font-black uppercase rounded-xl transition-all ${mode === m ? 'bg-cyan-500 text-black shadow-lg' : 'text-slate-400 hover:text-white'}`}>
+              {m === AppMode.EDIT ? <FileCode size={16} className="inline mr-2"/> : null}
+              {m}
+            </button>
           ))}
         </nav>
-        <div className="flex items-center gap-5">
-          <div className="px-5 py-2 bg-cyan-500/10 border border-cyan-500/20 rounded-full text-[11px] font-black text-cyan-400">{user?.tokens} TK</div>
-          <button onClick={() => db.signOut()} className="p-2.5 text-red-400 hover:bg-red-400/10 rounded-2xl transition-all"><LogOut size={22}/></button>
+
+        <div className="flex items-center gap-4">
+          <div className="px-4 py-2 bg-cyan-500/10 border border-cyan-500/20 rounded-full text-xs font-bold text-cyan-400">{user.tokens} Tokens</div>
+          <button className="p-2.5 text-red-400 hover:bg-red-400/10 rounded-xl"><LogOut size={20}/></button>
         </div>
       </header>
-      
-      <div className="flex-1 flex overflow-hidden">
+
+      <main className="flex-1 flex overflow-hidden">
         {mode === AppMode.PREVIEW || mode === AppMode.EDIT ? (
-          <div className="flex-1 flex h-full">
-            <section className="w-[480px] border-r border-white/5 flex flex-col bg-[#01040f] relative">
-              <div className="flex-1 p-10 overflow-y-auto code-scroll space-y-8 pb-48">
-                {messages.map(m => (
-                  <div key={m.id} className={`flex flex-col ${m.role === 'user' ? 'items-end' : 'items-start'} animate-in slide-in-from-bottom-8 duration-500`}>
-                    <div className={`max-w-[95%] p-7 rounded-[2.5rem] shadow-2xl ${m.role === 'user' ? 'bg-cyan-600 text-white rounded-tr-none' : 'bg-slate-900/90 border border-white/10 text-slate-100 rounded-tl-none'}`}>
-                      <div className="text-[15px] font-medium whitespace-pre-wrap">{m.content}</div>
+          <>
+            {/* Left Chat Column */}
+            <section className="w-[450px] border-r border-white/5 flex flex-col bg-[#01040f] relative">
+              <div className="flex-1 p-8 overflow-y-auto code-scroll space-y-6 pb-40">
+                {messages.map((m, idx) => (
+                  <div key={m.id} className={`flex flex-col ${m.role === 'user' ? 'items-end' : 'items-start'} animate-in slide-in-from-bottom-4`}>
+                    <div className={`max-w-[90%] p-5 rounded-3xl shadow-xl ${m.role === 'user' ? 'bg-cyan-600 text-white rounded-tr-none' : 'bg-slate-900/80 border border-white/5 text-slate-100 rounded-tl-none'}`}>
+                      <p className="text-[14px] leading-relaxed whitespace-pre-wrap">{m.content}</p>
+                      
+                      {/* Interactive Options Wizard */}
+                      {m.role === 'assistant' && m.options && idx === messages.length - 1 && (
+                        <div className="mt-5 space-y-3">
+                          <p className="text-[10px] font-black text-cyan-400/50 uppercase tracking-widest px-2">
+                            {m.inputType === 'single' ? 'একটি অপশন বেছে নিন' : 'একাধিক ফিচার সিলেক্ট করুন'}
+                          </p>
+                          <div className="space-y-2">
+                            {m.options.map((opt, i) => {
+                              const isSelected = selectedOptions.includes(opt.value);
+                              return (
+                                <button key={i} 
+                                  onClick={() => toggleOption(opt.value, m.inputType)}
+                                  className={`w-full p-4 rounded-2xl border text-left text-xs transition-all flex items-center justify-between group ${isSelected ? 'bg-cyan-500/10 border-cyan-500 text-cyan-400' : 'bg-black/40 border-white/5 hover:border-white/20'}`}
+                                >
+                                  <div className="flex items-center gap-3">
+                                    {m.inputType === 'single' ? (
+                                      isSelected ? <Circle className="fill-current" size={14}/> : <Circle size={14} className="opacity-20"/>
+                                    ) : (
+                                      isSelected ? <Check size={14} className="bg-cyan-500 text-black rounded-sm"/> : <Square size={14} className="opacity-20"/>
+                                    )}
+                                    <span className="font-medium">{opt.label}</span>
+                                  </div>
+                                  {isSelected && <Zap size={14} className="animate-pulse"/>}
+                                </button>
+                              );
+                            })}
+                          </div>
+                          
+                          <button 
+                            disabled={selectedOptions.length === 0}
+                            onClick={() => handleSend(`আমার নির্বাচন: ${selectedOptions.join(', ')}`)}
+                            className="w-full mt-4 py-4 bg-cyan-500 text-black font-black uppercase text-[11px] rounded-2xl tracking-widest hover:bg-cyan-400 transition-all shadow-lg active:scale-95 disabled:opacity-30 disabled:pointer-events-none"
+                          >
+                            CONFIRM SELECTION
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Quick Response Choices */}
                       {m.role === 'assistant' && m.choices && (
-                        <div className="mt-8 flex flex-wrap gap-2.5">
+                        <div className="mt-6 flex flex-wrap gap-2">
                           {m.choices.map((c, i) => (
-                            <button key={i} onClick={() => handleSend(c.prompt)} className="px-5 py-3 bg-cyan-500/10 border border-cyan-500/30 rounded-2xl text-[12px] font-bold text-cyan-400 hover:bg-cyan-500 hover:text-black transition-all flex items-center gap-2">
-                              <Zap size={14}/> {c.label}
+                            <button key={i} onClick={() => handleSend(c.prompt)} className="px-4 py-2 bg-white/5 hover:bg-cyan-500/20 border border-white/5 hover:border-cyan-500/50 rounded-xl text-[11px] font-bold text-slate-300 hover:text-cyan-400 transition-all">
+                              {c.label}
                             </button>
                           ))}
                         </div>
@@ -259,41 +185,142 @@ const App: React.FC = () => {
                     </div>
                   </div>
                 ))}
-                {isGenerating && <div className="p-6 bg-slate-900/50 rounded-3xl border border-white/5 flex items-center gap-4 animate-pulse text-cyan-500 font-bold text-xs uppercase tracking-widest"><Loader2 className="animate-spin" size={20}/> AI is forging code...</div>}
+                {isGenerating && <div className="flex items-center gap-3 text-cyan-500 text-xs font-black uppercase tracking-widest animate-pulse"><Loader2 size={16} className="animate-spin"/> AI DEVELOPER WORKING...</div>}
                 <div ref={chatEndRef} />
               </div>
-              <div className="p-10 absolute bottom-0 left-0 w-full bg-gradient-to-t from-[#01040f] via-[#01040f] to-transparent">
+
+              {/* Chat Input Field */}
+              <div className="p-8 absolute bottom-0 w-full bg-gradient-to-t from-[#01040f] via-[#01040f] to-transparent">
                 <div className="relative group">
-                  <textarea value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), handleSend())} placeholder="আপনার মোবাইল অ্যাপের আইডিয়া লিখুন..." className="w-full bg-slate-900 border border-white/10 rounded-[3rem] p-8 pr-28 text-[15px] h-32 outline-none text-white resize-none shadow-2xl focus:border-cyan-500/50 transition-all font-medium" />
-                  <button onClick={() => handleSend()} disabled={isGenerating} className="absolute bottom-6 right-6 p-6 bg-cyan-600 rounded-[2rem] text-white shadow-2xl hover:bg-cyan-500 transition-all active:scale-90">
-                    {isGenerating ? <Loader2 className="animate-spin" size={28}/> : <Send size={28}/>}
+                  <textarea 
+                    value={input} 
+                    onChange={e => setInput(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), handleSend())}
+                    placeholder="আপনার প্রজেক্টের পরবর্তী ফিচার বা পরিবর্তন লিখুন..." 
+                    className="w-full bg-slate-900 border border-white/10 rounded-[2.5rem] p-6 pr-20 text-sm h-32 outline-none text-white focus:border-cyan-500/50 transition-all resize-none shadow-2xl placeholder:opacity-30"
+                  />
+                  <button onClick={() => handleSend()} disabled={isGenerating} className="absolute bottom-6 right-6 p-4 bg-cyan-600 rounded-3xl text-white shadow-2xl hover:bg-cyan-500 transition-all active:scale-90 disabled:opacity-50">
+                    {isGenerating ? <Loader2 size={24} className="animate-spin"/> : <Send size={24}/>}
                   </button>
                 </div>
               </div>
             </section>
-            <section className="flex-1 p-10 bg-[#020617]/50 flex items-center justify-center">
-              <div className="bg-slate-900 rounded-[5.5rem] h-[750px] w-[380px] border-[16px] border-slate-800 shadow-2xl relative overflow-hidden animate-in zoom-in-95 duration-1000">
-                <div className="absolute top-0 left-1/2 -translate-x-1/2 w-44 h-8 bg-slate-800 rounded-b-[2.5rem] z-20 flex items-center justify-center"><div className="w-12 h-1.5 bg-white/5 rounded-full"></div></div>
-                <iframe ref={iframeRef} title="preview" className="w-full h-full border-none bg-white"/>
-              </div>
+
+            {/* Right Display Area */}
+            <section className="flex-1 flex flex-col bg-[#020617]">
+              {mode === AppMode.EDIT ? (
+                <div className="flex-1 flex overflow-hidden animate-in fade-in duration-500">
+                  <div className="w-72 border-r border-white/5 bg-black/30 p-8 space-y-2 overflow-y-auto code-scroll">
+                    <p className="text-[10px] uppercase font-black text-slate-500 mb-6 tracking-[0.3em] opacity-40">Project Architecture</p>
+                    {Object.keys(projectFiles).map(name => (
+                      <button key={name} onClick={() => setSelectedFile(name)} className={`w-full text-left px-5 py-3 rounded-2xl text-[11px] font-bold flex items-center gap-3 transition-all ${selectedFile === name ? 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 shadow-inner' : 'text-slate-500 hover:text-slate-300 hover:bg-white/5 border border-transparent'}`}>
+                        <FileCode size={14}/> {name}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="flex-1 p-8 overflow-hidden flex flex-col">
+                    <div className="flex justify-between items-center mb-6">
+                      <div className="flex items-center gap-3">
+                        <Terminal size={14} className="text-cyan-500"/>
+                        <span className="text-xs font-mono text-slate-500 tracking-wider">{selectedFile}</span>
+                      </div>
+                      <button className="flex items-center gap-2 px-6 py-2.5 bg-cyan-500 text-black rounded-2xl text-[11px] font-black uppercase tracking-widest hover:bg-cyan-400 shadow-lg active:scale-95 transition-all"><Save size={14}/> Save Source</button>
+                    </div>
+                    <pre className="flex-1 bg-slate-900/40 rounded-[2.5rem] p-10 border border-white/5 overflow-auto text-[13px] font-mono text-cyan-100/70 code-scroll leading-relaxed shadow-inner">
+                      {projectFiles[selectedFile]}
+                    </pre>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex-1 flex items-center justify-center p-10 relative">
+                  <div className="absolute inset-0 bg-grid opacity-20 pointer-events-none"></div>
+                  <div className="bg-slate-900 rounded-[4.5rem] h-[780px] w-[380px] border-[14px] border-slate-800 shadow-[0_0_100px_rgba(0,0,0,0.8)] relative overflow-hidden group">
+                    <div className="absolute top-0 left-1/2 -translate-x-1/2 w-44 h-8 bg-slate-800 rounded-b-3xl z-20 flex items-center justify-center"><div className="w-12 h-1 bg-white/5 rounded-full"></div></div>
+                    <iframe 
+                      key={JSON.stringify(projectFiles)}
+                      srcDoc={projectFiles['index.html']}
+                      title="preview" 
+                      className="w-full h-full border-none bg-white shadow-inner"
+                    />
+                  </div>
+                </div>
+              )}
             </section>
+          </>
+        ) : mode === AppMode.SHOP ? (
+          <div className="flex-1 p-20 overflow-y-auto animate-in slide-in-from-top-4 duration-700">
+             <div className="max-w-6xl mx-auto">
+                <div className="text-center mb-16">
+                   <h1 className="text-6xl font-black mb-4 tracking-tighter">Token <span className="text-cyan-400">Vault</span></h1>
+                   <p className="text-slate-400 text-lg">আপনার প্রফেশনাল প্রজেক্টকে এগিয়ে নিতে টোকেন রিচার্জ করুন</p>
+                </div>
+                <div className="grid grid-cols-3 gap-10">
+                  {[
+                    { name: 'Developer Starter', tk: 50, price: '৳ ৫০০', color: 'cyan', icon: <Package/> },
+                    { name: 'Pro Builder', tk: 250, price: '৳ ১৫০০', color: 'purple', popular: true, icon: <Rocket/> },
+                    { name: 'Agency Master', tk: 1200, price: '৳ ৫০০০', color: 'amber', icon: <Cpu/> }
+                  ].map((pkg, i) => (
+                    <div key={i} className={`glass-card p-12 rounded-[4rem] border-white/10 relative transition-all hover:scale-[1.03] group ${pkg.popular ? 'border-cyan-500/40 bg-cyan-500/5' : ''}`}>
+                       {pkg.popular && <div className="absolute -top-5 left-1/2 -translate-x-1/2 px-8 py-2.5 bg-cyan-500 text-black text-[10px] font-black uppercase rounded-full tracking-[0.3em] shadow-2xl">Elite Choice</div>}
+                       <div className="mb-8 p-5 bg-white/5 w-fit rounded-3xl group-hover:text-cyan-400 transition-colors">{pkg.icon}</div>
+                       <h3 className="text-2xl font-black mb-2">{pkg.name}</h3>
+                       <div className="text-6xl font-black text-white mb-6 mt-10 tracking-tighter">{pkg.tk} <span className="text-xl opacity-20 ml-1">TK</span></div>
+                       <p className="text-slate-400 mb-12 text-[14px] leading-relaxed">হাই-এন্ড এপিকে জেনারেশন এবং ক্লাউড বিল্ড সাপোর্টের জন্য উপযুক্ত।</p>
+                       <button className="w-full py-5 bg-white/5 border border-white/10 rounded-3xl font-black text-xl hover:bg-cyan-500 hover:text-black hover:shadow-[0_0_30px_rgba(6,182,212,0.4)] transition-all active:scale-95">{pkg.price}</button>
+                    </div>
+                  ))}
+                </div>
+             </div>
           </div>
-        ) : mode === AppMode.PROFILE ? (
-          <div className="flex-1 flex items-center justify-center p-20">
-            <div className="max-w-md w-full glass-card p-16 rounded-[5rem] text-center border-white/10">
-              <div className="w-32 h-32 rounded-[3rem] border-4 border-cyan-500 mx-auto mb-8 p-1.5 bg-[#0f172a] overflow-hidden">
-                <img src={user?.avatar_url} className="w-full h-full object-cover" alt="Profile"/>
+        ) : mode === AppMode.SETTINGS ? (
+          <div className="flex-1 flex items-center justify-center p-10 bg-grid">
+            <div className="max-w-xl w-full glass-card p-14 rounded-[4.5rem] border-white/10 shadow-2xl animate-in zoom-in-95 duration-500">
+               <div className="flex items-center gap-5 mb-12">
+                 <div className="p-5 bg-cyan-500/10 rounded-3xl text-cyan-400"><Github size={36}/></div>
+                 <div>
+                   <h2 className="text-3xl font-black tracking-tight">Cloud Sync</h2>
+                   <p className="text-slate-500 text-[13px] font-medium">আপনার সোর্স কোড সরাসরি গিটহাবে পুশ করুন</p>
+                 </div>
+               </div>
+               <div className="space-y-8">
+                 <div className="group">
+                   <label className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-500 ml-5 mb-3 block group-hover:text-cyan-400 transition-colors">GitHub Personal Access Token</label>
+                   <div className="relative">
+                     <input type="password" value={github.token} onChange={e => setGithub({...github, token: e.target.value})} className="w-full bg-slate-900/50 border border-white/5 rounded-3xl p-5 pl-14 text-sm outline-none focus:border-cyan-500/50 transition-all" placeholder="ghp_xxxxxxxxxxxx"/>
+                     <Key className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-600" size={18}/>
+                   </div>
+                 </div>
+                 <div className="grid grid-cols-2 gap-6">
+                    <div className="group">
+                      <label className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-500 ml-5 mb-3 block">Username</label>
+                      <input type="text" value={github.owner} onChange={e => setGithub({...github, owner: e.target.value})} className="w-full bg-slate-900/50 border border-white/5 rounded-3xl p-5 text-sm outline-none focus:border-cyan-500/50" placeholder="username"/>
+                    </div>
+                    <div className="group">
+                      <label className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-500 ml-5 mb-3 block">Repository</label>
+                      <input type="text" value={github.repo} onChange={e => setGithub({...github, repo: e.target.value})} className="w-full bg-slate-900/50 border border-white/5 rounded-3xl p-5 text-sm outline-none focus:border-cyan-500/50" placeholder="my-app"/>
+                    </div>
+                 </div>
+                 <button className="w-full py-5 bg-cyan-600 rounded-3xl font-black uppercase tracking-[0.2em] text-white mt-4 shadow-2xl hover:bg-cyan-500 hover:shadow-[0_0_40px_rgba(6,182,212,0.3)] transition-all active:scale-95">ESTABLISH CONNECTION</button>
+               </div>
+               <button onClick={() => setMode(AppMode.PREVIEW)} className="w-full mt-10 text-slate-500 text-[11px] font-black uppercase tracking-widest hover:text-white flex items-center justify-center gap-3 transition-colors"><ArrowLeft size={16}/> Return to Terminal</button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex-1 flex items-center justify-center p-20 animate-in fade-in duration-1000">
+            <div className="max-w-md w-full glass-card p-16 rounded-[5.5rem] text-center border-white/10 shadow-[0_0_80px_rgba(0,0,0,0.5)]">
+              <div className="w-36 h-36 rounded-[3.5rem] border-4 border-cyan-500 mx-auto mb-10 p-2 bg-[#0f172a] overflow-hidden shadow-[0_0_30px_rgba(6,182,212,0.2)]">
+                <img src={user.avatar_url} className="w-full h-full object-cover" alt="Profile"/>
               </div>
-              <h2 className="text-3xl font-black mb-2 tracking-tighter">{user?.name}</h2>
-              <p className="text-cyan-400/50 text-sm font-bold mb-10">{user?.email}</p>
-              <div className="bg-slate-900/50 p-10 rounded-[3.5rem] border border-white/5">
-                <p className="text-[10px] uppercase font-black opacity-20 mb-2 tracking-[0.4em]">Available Tokens</p>
-                <p className="text-6xl font-black tracking-tighter text-white">{user?.tokens}<span className="text-xl ml-2 opacity-10">TK</span></p>
+              <h2 className="text-4xl font-black mb-3 tracking-tighter">{user.name}</h2>
+              <p className="text-cyan-400/50 text-sm font-bold mb-12 uppercase tracking-widest">{user.email}</p>
+              <div className="bg-slate-900/80 p-12 rounded-[4rem] border border-white/5 shadow-inner">
+                <p className="text-[10px] uppercase font-black opacity-20 mb-3 tracking-[0.5em]">Neural Tokens</p>
+                <p className="text-7xl font-black tracking-tighter text-white">{user.tokens}<span className="text-2xl ml-2 opacity-10">UNIT</span></p>
               </div>
             </div>
           </div>
-        ) : null}
-      </div>
+        )}
+      </main>
     </div>
   );
 };
