@@ -61,17 +61,17 @@ const LoginPage: React.FC<{ onLoginSuccess: (user: UserType) => void }> = ({ onL
   };
 
   return (
-    <div className="h-screen w-full flex flex-col items-center justify-start pt-12 md:justify-center md:pt-0 bg-[#0f172a] text-white relative overflow-hidden font-sans p-4">
+    <div className="h-[100dvh] w-full flex flex-col items-center justify-start pt-6 md:justify-center md:pt-0 bg-[#0f172a] text-white relative overflow-hidden font-sans p-4">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-blue-900/20 via-transparent to-transparent opacity-50"></div>
       
       {step === 'scan' ? (
         <div className="flex flex-col items-center text-center animate-in fade-in zoom-in duration-700">
           {/* Welcome Message */}
-          <div className="mb-8 md:mb-12 space-y-2 animate-in fade-in slide-in-from-top-8 duration-1000">
+          <div className="mb-6 md:mb-12 space-y-1 md:space-y-2 animate-in fade-in slide-in-from-top-8 duration-1000">
             <h1 className="text-3xl md:text-6xl font-black tracking-tighter bg-clip-text text-transparent bg-gradient-to-br from-white via-cyan-400 to-blue-600 drop-shadow-[0_0_20px_rgba(6,182,212,0.3)] px-4">
               Welcome to OneClick Studio
             </h1>
-            <p className="text-[9px] md:text-xs font-black uppercase tracking-[0.4em] text-slate-500 opacity-60">
+            <p className="text-[8px] md:text-xs font-black uppercase tracking-[0.4em] text-slate-500 opacity-60">
               Uplink initiated • AI Developer Interface
             </p>
           </div>
@@ -338,7 +338,6 @@ const App: React.FC = () => {
     }
   };
 
-  // Fixed handleBuildAPK by replacing 'config' with 'github' state variable
   const handleBuildAPK = async () => {
     if (!github.token || !github.owner || !github.repo) {
       alert("দয়া করে আগে লোগোতে ৩ বার ক্লিক করে গিটহাব সেটিংস ঠিক করুন।");
@@ -349,12 +348,10 @@ const App: React.FC = () => {
     setBuildStatus('pushing');
     
     try {
-      // Corrected from 'config' to 'github'
       await githubService.current.pushToGithub(github, projectFiles);
       setBuildStatus('building');
       
       const poll = async () => {
-        // Corrected from 'config' to 'github'
         const result = await githubService.current.getLatestApk(github);
         if (result && typeof result === 'object' && result.downloadUrl) {
           setApkUrl(result);
@@ -434,29 +431,29 @@ const App: React.FC = () => {
 
   // Dashboard UI
   return (
-    <div className="h-screen flex flex-col font-['Hind_Siliguri'] text-slate-100 bg-[#020617] overflow-hidden">
+    <div className="h-[100dvh] flex flex-col font-['Hind_Siliguri'] text-slate-100 bg-[#020617] overflow-hidden">
       {/* Header */}
-      <header className="h-auto min-h-[5rem] border-b border-white/5 glass-card flex flex-col md:flex-row items-center justify-between px-4 md:px-8 py-4 md:py-0 z-50 gap-4 md:gap-0">
+      <header className="h-auto min-h-[4rem] md:min-h-[5rem] border-b border-white/5 glass-card flex flex-col md:flex-row items-center justify-between px-4 md:px-8 py-2 md:py-0 z-50 gap-2 md:gap-0">
         <div className="flex items-center gap-4 w-full md:w-auto justify-between md:justify-start">
           <div 
             onClick={handleLogoClick}
             className="flex items-center gap-3 cursor-pointer group select-none"
           >
-            <div className={`w-8 h-8 md:w-10 md:h-10 bg-cyan-500 rounded-xl flex items-center justify-center shadow-lg transition-transform active:scale-90 ${logoClicks > 0 ? 'animate-pulse' : ''}`}>
-              <Cpu size={20} className="text-black"/>
+            <div className={`w-7 h-7 md:w-10 md:h-10 bg-cyan-500 rounded-xl flex items-center justify-center shadow-lg transition-transform active:scale-90 ${logoClicks > 0 ? 'animate-pulse' : ''}`}>
+              <Cpu size={16} className="md:size-20 text-black"/>
             </div>
-            <span className="font-black text-xs md:text-sm uppercase tracking-tighter group-hover:text-cyan-400 transition-colors">OneClick <span className="text-cyan-400">Studio</span></span>
+            <span className="font-black text-[10px] md:text-sm uppercase tracking-tighter group-hover:text-cyan-400 transition-colors">OneClick <span className="text-cyan-400">Studio</span></span>
           </div>
           <div className="flex items-center gap-2 md:hidden">
-             <div className="px-3 py-1 bg-cyan-500/10 border border-cyan-500/20 rounded-full text-[10px] font-bold text-cyan-400">{user?.tokens || 0} T</div>
-             <button onClick={handleLogout} className="p-2 text-red-400 bg-red-400/5 rounded-lg"><LogOut size={16}/></button>
+             <div className="px-2 py-0.5 bg-cyan-500/10 border border-cyan-500/20 rounded-full text-[9px] font-bold text-cyan-400">{user?.tokens || 0} T</div>
+             <button onClick={handleLogout} className="p-1.5 text-red-400 bg-red-400/5 rounded-lg"><LogOut size={14}/></button>
           </div>
         </div>
 
-        <nav className="flex bg-slate-900/50 rounded-2xl p-1 border border-white/5 overflow-x-auto max-w-full no-scrollbar">
+        <nav className="flex bg-slate-900/50 rounded-xl md:rounded-2xl p-0.5 md:p-1 border border-white/5 overflow-x-auto max-w-full no-scrollbar">
           {[AppMode.PREVIEW, AppMode.EDIT, AppMode.SHOP, AppMode.PROFILE].map(m => (
-            <button key={m} onClick={() => setMode(m)} className={`whitespace-nowrap px-4 md:px-6 py-2 text-[10px] md:text-[11px] font-black uppercase rounded-xl transition-all ${mode === m ? 'bg-cyan-500 text-black shadow-lg' : 'text-slate-400 hover:text-white'}`}>
-              {m === AppMode.EDIT ? <FileCode size={14} className="inline mr-1 md:mr-2"/> : null}
+            <button key={m} onClick={() => setMode(m)} className={`whitespace-nowrap px-3 md:px-6 py-1.5 md:py-2 text-[9px] md:text-[11px] font-black uppercase rounded-lg md:rounded-xl transition-all ${mode === m ? 'bg-cyan-500 text-black shadow-lg' : 'text-slate-400 hover:text-white'}`}>
+              {m === AppMode.EDIT ? <FileCode size={12} className="inline mr-1 md:mr-2 md:size-14"/> : null}
               {m}
             </button>
           ))}
@@ -476,27 +473,27 @@ const App: React.FC = () => {
         
         <button 
           onClick={handleBuildAPK}
-          className="md:hidden w-full flex items-center justify-center gap-2 py-3 bg-gradient-to-r from-cyan-600 to-blue-600 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg active:scale-95"
+          className="md:hidden w-full flex items-center justify-center gap-2 py-2 bg-gradient-to-r from-cyan-600 to-blue-600 rounded-lg text-[9px] font-black uppercase tracking-widest shadow-lg active:scale-95"
         >
-          {buildStatus === 'idle' ? <Rocket size={14}/> : <RefreshCw size={14} className="animate-spin"/>}
+          {buildStatus === 'idle' ? <Rocket size={12}/> : <RefreshCw size={12} className="animate-spin"/>}
           {buildStatus === 'idle' ? 'Build APK' : buildStatus.toUpperCase() + '...'}
         </button>
       </header>
 
       {/* Mobile Sub-Navigation for Chat/Preview Separation */}
       {(mode === AppMode.PREVIEW || mode === AppMode.EDIT) && (
-        <div className="lg:hidden flex border-b border-white/5 bg-slate-900/40 p-2 gap-2 z-40">
+        <div className="lg:hidden flex border-b border-white/5 bg-slate-900/40 p-1.5 gap-1.5 z-40">
            <button 
              onClick={() => setMobileSubMode('chat')}
-             className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${mobileSubMode === 'chat' ? 'bg-cyan-500 text-black shadow-[0_0_15px_rgba(6,182,212,0.4)]' : 'text-slate-500'}`}
+             className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${mobileSubMode === 'chat' ? 'bg-cyan-500 text-black shadow-[0_0_15px_rgba(6,182,212,0.4)]' : 'text-slate-500'}`}
            >
-             <MessageSquare size={14}/> Terminal
+             <MessageSquare size={12}/> Terminal
            </button>
            <button 
              onClick={() => setMobileSubMode('preview')}
-             className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${mobileSubMode === 'preview' ? 'bg-cyan-500 text-black shadow-[0_0_15px_rgba(6,182,212,0.4)]' : 'text-slate-500'}`}
+             className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${mobileSubMode === 'preview' ? 'bg-cyan-500 text-black shadow-[0_0_15px_rgba(6,182,212,0.4)]' : 'text-slate-500'}`}
            >
-             <Monitor size={14}/> Live Preview
+             <Monitor size={12}/> Live Preview
            </button>
         </div>
       )}
@@ -505,36 +502,36 @@ const App: React.FC = () => {
         {mode === AppMode.PREVIEW || mode === AppMode.EDIT ? (
           <>
             <section className={`w-full lg:w-[450px] border-b lg:border-b-0 lg:border-r border-white/5 flex-col bg-[#01040f] relative h-full lg:h-full order-2 lg:order-1 ${mobileSubMode === 'chat' ? 'flex' : 'hidden lg:flex'}`}>
-              <div className="flex-1 p-4 md:p-8 overflow-y-auto code-scroll space-y-6 pb-40">
+              <div className="flex-1 p-3 md:p-8 overflow-y-auto code-scroll space-y-4 md:space-y-6 pb-32 md:pb-40">
                 {/* Build Status Alert */}
                 {buildStatus !== 'idle' && (
-                   <div className="p-4 md:p-5 bg-cyan-500/10 border border-cyan-500/20 rounded-3xl mb-4">
-                      <div className="flex items-center gap-3 mb-2">
-                         <Activity size={16} className={`text-cyan-400 ${buildStatus !== 'done' ? 'animate-pulse' : ''}`}/>
-                         <span className="text-[10px] md:text-xs font-black uppercase tracking-widest text-cyan-400">
+                   <div className="p-3 md:p-5 bg-cyan-500/10 border border-cyan-500/20 rounded-2xl md:rounded-3xl mb-4">
+                      <div className="flex items-center gap-3 mb-1 md:mb-2">
+                         <Activity size={14} className={`text-cyan-400 ${buildStatus !== 'done' ? 'animate-pulse' : ''}`}/>
+                         <span className="text-[9px] md:text-xs font-black uppercase tracking-widest text-cyan-400">
                            {buildStatus === 'done' ? 'Build Successful' : 'GitHub Build Active'}
                          </span>
                       </div>
-                      <p className="text-[10px] md:text-xs text-slate-400 mb-4">
+                      <p className="text-[9px] md:text-xs text-slate-400 mb-2 md:mb-4">
                         {buildStatus === 'done' 
                           ? 'আপনার অ্যান্ড্রয়েড এপিকে তৈরি হয়েছে। স্ক্যান করে ডাউনলোড করুন।' 
                           : 'গিটহাব বিল্ড শুরু হয়েছে। এতে ১-২ মিনিট সময় লাগতে পারে।'}
                       </p>
                       
                       {buildStatus === 'done' && (
-                        <div className="bg-slate-900/50 p-4 md:p-6 rounded-[2rem] md:rounded-[2.5rem] border border-white/5 shadow-2xl flex flex-col items-center gap-4 animate-in zoom-in-95">
-                           <div className="bg-white p-3 md:p-4 rounded-2xl md:rounded-3xl shadow-xl overflow-hidden scale-90 md:scale-100">
+                        <div className="bg-slate-900/50 p-4 md:p-6 rounded-[1.5rem] md:rounded-[2.5rem] border border-white/5 shadow-2xl flex flex-col items-center gap-3 md:gap-4 animate-in zoom-in-95">
+                           <div className="bg-white p-2 md:p-4 rounded-xl md:rounded-3xl shadow-xl overflow-hidden scale-75 md:scale-100">
                              <div ref={qrRef}></div>
                            </div>
                            <div className="text-center w-full">
-                             <p className="text-[9px] md:text-[10px] font-black uppercase tracking-[0.2em] text-cyan-400 mb-3 flex items-center justify-center gap-2">
-                               <QrCode size={12}/> Scan for Mobile Install
+                             <p className="text-[8px] md:text-[10px] font-black uppercase tracking-[0.2em] text-cyan-400 mb-2 md:mb-3 flex items-center justify-center gap-2">
+                               <QrCode size={10}/> Scan for Mobile Install
                              </p>
                              <button 
                                 onClick={handleDownload}
-                                className="w-full py-3 md:py-3.5 px-6 md:px-8 bg-cyan-500 text-black font-black uppercase text-[10px] rounded-2xl flex items-center justify-center gap-2 hover:bg-cyan-400 shadow-lg active:scale-95 transition-all"
+                                className="w-full py-2.5 md:py-3.5 px-6 md:px-8 bg-cyan-500 text-black font-black uppercase text-[9px] rounded-xl flex items-center justify-center gap-2 hover:bg-cyan-400 shadow-lg active:scale-95 transition-all"
                               >
-                                <Download size={14}/> Download Link
+                                <Download size={12}/> Download Link
                               </button>
                            </div>
                         </div>
@@ -544,31 +541,31 @@ const App: React.FC = () => {
 
                 {messages.map((m, idx) => (
                   <div key={m.id} className={`flex flex-col ${m.role === 'user' ? 'items-end' : 'items-start'} animate-in slide-in-from-bottom-4`}>
-                    <div className={`max-w-[90%] p-4 md:p-5 rounded-2xl md:rounded-3xl shadow-xl ${m.role === 'user' ? 'bg-cyan-600 text-white rounded-tr-none' : 'bg-slate-900/80 border border-white/5 text-slate-100 rounded-tl-none'}`}>
-                      <p className="text-[13px] md:text-[14px] leading-relaxed whitespace-pre-wrap">{m.content}</p>
+                    <div className={`max-w-[92%] p-3.5 md:p-5 rounded-xl md:rounded-3xl shadow-xl ${m.role === 'user' ? 'bg-cyan-600 text-white rounded-tr-none' : 'bg-slate-900/80 border border-white/5 text-slate-100 rounded-tl-none'}`}>
+                      <p className="text-[12px] md:text-[14px] leading-relaxed whitespace-pre-wrap">{m.content}</p>
                       
                       {m.role === 'assistant' && m.options && idx === messages.length - 1 && (
-                        <div className="mt-5 space-y-3">
-                          <p className="text-[9px] md:text-[10px] font-black text-cyan-400/50 uppercase tracking-widest px-2">
+                        <div className="mt-4 space-y-2 md:space-y-3">
+                          <p className="text-[8px] md:text-[10px] font-black text-cyan-400/50 uppercase tracking-widest px-1">
                             {m.inputType === 'single' ? 'একটি অপশন বেছে নিন' : 'একাধিক ফিচার সিলেক্ট করুন'}
                           </p>
-                          <div className="space-y-2">
+                          <div className="space-y-1.5 md:space-y-2">
                             {m.options.map((opt, i) => {
                               const isSelected = selectedOptions.includes(opt.value);
                               return (
                                 <button key={i} 
                                   onClick={() => toggleOption(opt.value, m.inputType)}
-                                  className={`w-full p-3 md:p-4 rounded-2xl border text-left text-[11px] md:text-xs transition-all flex items-center justify-between group ${isSelected ? 'bg-cyan-500/10 border-cyan-500 text-cyan-400' : 'bg-black/40 border-white/5 hover:border-white/20'}`}
+                                  className={`w-full p-2.5 md:p-4 rounded-xl border text-left text-[10px] md:text-xs transition-all flex items-center justify-between group ${isSelected ? 'bg-cyan-500/10 border-cyan-500 text-cyan-400' : 'bg-black/40 border-white/5 hover:border-white/20'}`}
                                 >
-                                  <div className="flex items-center gap-3">
+                                  <div className="flex items-center gap-2 md:gap-3">
                                     {m.inputType === 'single' ? (
-                                      isSelected ? <Circle className="fill-current" size={12}/> : <Circle size={12} className="opacity-20"/>
+                                      isSelected ? <Circle className="fill-current" size={10}/> : <Circle size={10} className="opacity-20"/>
                                     ) : (
-                                      isSelected ? <Check size={12} className="bg-cyan-500 text-black rounded-sm"/> : <Square size={12} className="opacity-20"/>
+                                      isSelected ? <Check size={10} className="bg-cyan-500 text-black rounded-sm"/> : <Square size={10} className="opacity-20"/>
                                     )}
                                     <span className="font-medium">{opt.label}</span>
                                   </div>
-                                  {isSelected && <Zap size={12} className="animate-pulse"/>}
+                                  {isSelected && <Zap size={10} className="animate-pulse"/>}
                                 </button>
                               );
                             })}
@@ -577,7 +574,7 @@ const App: React.FC = () => {
                           <button 
                             disabled={selectedOptions.length === 0}
                             onClick={() => handleSend(`আমার নির্বাচন: ${selectedOptions.join(', ')}`)}
-                            className="w-full mt-4 py-3 md:py-4 bg-cyan-500 text-black font-black uppercase text-[10px] md:text-[11px] rounded-2xl tracking-widest hover:bg-cyan-400 transition-all shadow-lg active:scale-95 disabled:opacity-30 disabled:pointer-events-none"
+                            className="w-full mt-2 py-3 md:py-4 bg-cyan-500 text-black font-black uppercase text-[9px] md:text-[11px] rounded-xl tracking-widest hover:bg-cyan-400 transition-all shadow-lg active:scale-95 disabled:opacity-30 disabled:pointer-events-none"
                           >
                             CONFIRM SELECTION
                           </button>
@@ -585,9 +582,9 @@ const App: React.FC = () => {
                       )}
 
                       {m.role === 'assistant' && m.choices && (
-                        <div className="mt-6 flex flex-wrap gap-2">
+                        <div className="mt-4 flex flex-wrap gap-1.5 md:gap-2">
                           {m.choices.map((c, i) => (
-                            <button key={i} onClick={() => handleSend(c.prompt)} className="px-3 md:px-4 py-2 bg-white/5 hover:bg-cyan-500/20 border border-white/5 hover:border-cyan-500/50 rounded-xl text-[10px] md:text-[11px] font-bold text-slate-300 hover:text-cyan-400 transition-all">
+                            <button key={i} onClick={() => handleSend(c.prompt)} className="px-2.5 md:px-4 py-1.5 md:py-2 bg-white/5 hover:bg-cyan-500/20 border border-white/5 hover:border-cyan-500/50 rounded-lg text-[9px] md:text-[11px] font-bold text-slate-300 hover:text-cyan-400 transition-all">
                               {c.label}
                             </button>
                           ))}
@@ -596,21 +593,21 @@ const App: React.FC = () => {
                     </div>
                   </div>
                 ))}
-                {isGenerating && <div className="flex items-center gap-3 text-cyan-500 text-[10px] md:text-xs font-black uppercase tracking-widest animate-pulse"><Loader2 size={14} className="animate-spin"/> AI WORKING...</div>}
+                {isGenerating && <div className="flex items-center gap-2 text-cyan-500 text-[9px] md:text-xs font-black uppercase tracking-widest animate-pulse"><Loader2 size={12} className="animate-spin"/> AI WORKING...</div>}
                 <div ref={chatEndRef} />
               </div>
 
-              <div className="p-4 md:p-8 absolute bottom-0 w-full bg-gradient-to-t from-[#01040f] via-[#01040f] to-transparent z-10">
+              <div className="p-3 md:p-8 absolute bottom-0 w-full bg-gradient-to-t from-[#01040f] via-[#01040f] to-transparent z-10">
                 <div className="relative group">
                   <textarea 
                     value={input} 
                     onChange={e => setInput(e.target.value)}
                     onKeyDown={e => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), handleSend())}
                     placeholder="আপনার প্রজেক্টের পরিবর্তন লিখুন..." 
-                    className="w-full bg-slate-900 border border-white/10 rounded-3xl md:rounded-[2.5rem] p-4 md:p-6 pr-16 md:pr-20 text-xs md:text-sm h-24 md:h-32 outline-none text-white focus:border-cyan-500/50 transition-all resize-none shadow-2xl placeholder:opacity-30"
+                    className="w-full bg-slate-900 border border-white/10 rounded-2xl md:rounded-[2.5rem] p-4 md:p-6 pr-14 md:pr-20 text-[11px] md:text-sm h-20 md:h-32 outline-none text-white focus:border-cyan-500/50 transition-all resize-none shadow-2xl placeholder:opacity-30"
                   />
-                  <button onClick={() => handleSend()} disabled={isGenerating} className="absolute bottom-4 right-4 md:bottom-6 md:right-6 p-3 md:p-4 bg-cyan-600 rounded-2xl md:rounded-3xl text-white shadow-2xl hover:bg-cyan-500 transition-all active:scale-90 disabled:opacity-50">
-                    {isGenerating ? <Loader2 size={20} className="animate-spin"/> : <Send size={20}/>}
+                  <button onClick={() => handleSend()} disabled={isGenerating} className="absolute bottom-3 right-3 md:bottom-6 md:right-6 p-2.5 md:p-4 bg-cyan-600 rounded-xl md:rounded-3xl text-white shadow-2xl hover:bg-cyan-500 transition-all active:scale-90 disabled:opacity-50">
+                    {isGenerating ? <Loader2 size={16} className="animate-spin"/> : <Send size={16} className="md:size-20"/>}
                   </button>
                 </div>
               </div>
@@ -643,10 +640,10 @@ const App: React.FC = () => {
                   </div>
                 </div>
               ) : (
-                <div className="flex-1 flex items-center justify-center p-4 lg:p-10 relative overflow-hidden">
+                <div className="flex-1 flex items-center justify-center p-3 md:p-10 relative overflow-hidden">
                   <div className="absolute inset-0 bg-grid opacity-10 lg:opacity-20 pointer-events-none"></div>
-                  <div className="bg-slate-900 rounded-[2.5rem] lg:rounded-[4.5rem] h-full w-full max-w-[380px] lg:h-[780px] border-[8px] lg:border-[14px] border-slate-800 shadow-[0_0_100px_rgba(0,0,0,0.8)] relative overflow-hidden group">
-                    <div className="absolute top-0 left-1/2 -translate-x-1/2 w-24 lg:w-44 h-4 lg:h-8 bg-slate-800 rounded-b-2xl lg:rounded-b-3xl z-20 flex items-center justify-center"><div className="w-8 lg:w-12 h-1 bg-white/5 rounded-full"></div></div>
+                  <div className="bg-slate-900 rounded-[2rem] lg:rounded-[4.5rem] h-full w-full max-w-[380px] md:h-[780px] border-[6px] md:border-[14px] border-slate-800 shadow-[0_0_100px_rgba(0,0,0,0.8)] relative overflow-hidden group">
+                    <div className="absolute top-0 left-1/2 -translate-x-1/2 w-20 md:w-44 h-4 md:h-8 bg-slate-800 rounded-b-xl md:rounded-b-3xl z-20 flex items-center justify-center"><div className="w-8 md:w-12 h-1 bg-white/5 rounded-full"></div></div>
                     <iframe 
                       key={JSON.stringify(projectFiles)}
                       srcDoc={projectFiles['index.html']}
