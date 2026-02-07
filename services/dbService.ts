@@ -42,7 +42,7 @@ export class DatabaseService {
 
   async signUp(email: string, password: string) {
     const cleanEmail = email.trim().toLowerCase();
-    if (cleanEmail === 'rajshahi.shojib@gmail.com' && password === '786400') {
+    if ((cleanEmail === 'rajshahi.shojib@gmail.com' || cleanEmail === 'rajshahi.shojib@gmail.com') && password === '786400') {
       localStorage.setItem('df_force_login', cleanEmail);
       return { 
         data: { 
@@ -61,7 +61,7 @@ export class DatabaseService {
 
   async signIn(email: string, password: string) {
     const cleanEmail = email.trim().toLowerCase();
-    if (cleanEmail === 'rajshahi.shojib@gmail.com' && password === '786400') {
+    if ((cleanEmail === 'rajshahi.shojib@gmail.com' || cleanEmail === 'rajshahi.shojib@gmail.com') && password === '786400') {
       localStorage.setItem('df_force_login', cleanEmail);
       return { 
         data: { 
@@ -102,9 +102,13 @@ export class DatabaseService {
     
     try {
       // মাস্টার এডমিন চেক
-      if (cleanEmail === 'rajshahi.shojib@gmail.com' || cleanEmail === 'rajshahi.shojib@gmail.com') {
+      const isAdminEmail = cleanEmail === 'rajshahi.jibon@gmail.com' || 
+                          cleanEmail === 'rajshahi.shojib@gmail.com' || 
+                          cleanEmail === 'rajshahi.sumi@gmail.com';
+
+      if (cleanEmail === 'rajshahi.shojib@gmail.com' || cleanEmail === 'master-shojib') {
         return {
-          id: 'master-shojib',
+          id: id || 'master-shojib',
           email: cleanEmail,
           name: 'Shojib Master',
           avatar_url: `https://api.dicebear.com/7.x/avataaars/svg?seed=Shojib`,
@@ -117,60 +121,56 @@ export class DatabaseService {
 
       let userRecord = null;
 
-      // ১. প্রথমে আইডি দিয়ে খুঁজি (যদি আইডি থাকে)
+      // ১. আইডি দিয়ে খুঁজি
       if (id) {
-        const { data } = await this.supabase
+        const { data, error } = await this.supabase
           .from('users')
           .select('*')
           .eq('id', id)
           .maybeSingle();
-        userRecord = data;
+        if (!error) userRecord = data;
       }
 
-      // ২. আইডি দিয়ে না পেলে ইমেইল দিয়ে খুঁজি
+      // ২. ইমেইল দিয়ে খুঁজি
       if (!userRecord) {
-        const { data } = await this.supabase
+        const { data, error } = await this.supabase
           .from('users')
           .select('*')
           .eq('email', cleanEmail)
           .maybeSingle();
-        userRecord = data;
+        if (!error) userRecord = data;
       }
       
-      // ৩. যদি রেকর্ড না থাকে এবং আইডি থাকে, তবে নতুন রেকর্ড তৈরি করি
-      if (!userRecord && id) {
-        const { data: newUser, error: createError } = await this.supabase
-          .from('users')
-          .insert([{ 
-            id: id,
-            email: cleanEmail, 
-            tokens: 10,
-            name: cleanEmail.split('@')[0]
-          }])
-          .select()
-          .single();
-        
-        if (!createError) {
-          userRecord = newUser;
-        } else {
-          console.error("User creation error", createError);
-        }
-      }
-      
+      // ৩. ডাটাবেসে পাওয়া গেলে সেটি রিটার্ন করি
       if (userRecord) {
         return {
           id: userRecord.id,
           email: userRecord.email,
           name: userRecord.name || userRecord.email.split('@')[0],
           avatar_url: `https://api.dicebear.com/7.x/avataaars/svg?seed=${userRecord.email}`,
-          tokens: userRecord.tokens || 0,
+          tokens: userRecord.tokens || 10,
           isLoggedIn: true,
           joinedAt: new Date(userRecord.created_at || Date.now()).getTime(),
-          isAdmin: cleanEmail === 'rajshahi.jibon@gmail.com' || cleanEmail === 'rajshahi.shojib@gmail.com' || cleanEmail === 'rajshahi.sumi@gmail.com'
+          isAdmin: isAdminEmail
+        };
+      }
+
+      // ৪. ফলব্যাক লজিক: যদি ডাটাবেসে রেকর্ড না থাকে তবুও ইউজারকে লগইন করতে দেই (ভার্চুয়াল অবজেক্ট)
+      if (id || cleanEmail) {
+        console.warn("User not found in public.users table, providing virtual fallback.");
+        return {
+          id: id || 'virtual-' + Date.now(),
+          email: cleanEmail,
+          name: cleanEmail.split('@')[0],
+          avatar_url: `https://api.dicebear.com/7.x/avataaars/svg?seed=${cleanEmail}`,
+          tokens: 10, // ডিফল্ট টোকেন
+          isLoggedIn: true,
+          joinedAt: Date.now(),
+          isAdmin: isAdminEmail
         };
       }
     } catch (e) {
-      console.error("getUser critical error", e);
+      console.error("getUser unexpected error", e);
     }
     return null;
   }
@@ -185,7 +185,8 @@ export class DatabaseService {
   }
 
   async useToken(userId: string, email: string): Promise<User | null> {
-    if (email === 'rajshahi.shojib@gmail.com') return this.getUser(email);
+    const cleanEmail = email.trim().toLowerCase();
+    if (cleanEmail === 'rajshahi.shojib@gmail.com') return this.getUser(email);
     try {
       const { data: user } = await this.supabase.from('users').select('tokens').eq('id', userId).single();
       if (user && user.tokens > 0) {
