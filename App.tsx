@@ -65,82 +65,98 @@ const App: React.FC = () => {
   const gemini = useRef(new GeminiService());
   const chatEndRef = useRef<HTMLDivElement>(null);
 
+  // Sync scroll on chat
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isGenerating]);
 
+  // Preview Iframe Logic
   useEffect(() => {
     if (mode === AppMode.PREVIEW && iframeRef.current) {
-      const html = projectFiles['index.html'] || '<html><body></body></html>';
+      const html = projectFiles['index.html'] || '';
       const css = projectFiles['styles.css'] || '';
       const js = projectFiles['main.js'] || '';
-      
       let docContent = html;
-      if (docContent.includes('</head>')) {
-        docContent = docContent.replace('</head>', `<style>${css}</style></head>`);
-      } else if (docContent.includes('<html>')) {
-        docContent = docContent.replace('<html>', `<html><head><style>${css}</style></head>`);
-      }
-
-      if (docContent.includes('</body>')) {
-        docContent = docContent.replace('</body>', `<script>${js}</script></body>`);
-      } else {
-        docContent = docContent + `<script>${js}</script>`;
-      }
-
+      if (docContent.includes('</head>')) docContent = docContent.replace('</head>', `<style>${css}</style></head>`);
+      if (docContent.includes('</body>')) docContent = docContent.replace('</body>', `<script>${js}</script></body>`);
       try {
         const doc = iframeRef.current.contentDocument || iframeRef.current.contentWindow?.document;
-        if (doc) {
-          doc.open();
-          doc.write(docContent);
-          doc.close();
-        }
-      } catch (e) {
-        console.warn("Iframe injection failed", e);
-      }
+        if (doc) { doc.open(); doc.write(docContent); doc.close(); }
+      } catch (e) {}
     }
   }, [projectFiles, mode]);
 
+  // Authentication & Initialization
   useEffect(() => {
-    const init = async () => {
-      try {
-        console.log("Initializing App...");
-        let session = await db.getCurrentSession();
-        let userEmail = session?.user?.email || localStorage.getItem('df_force_login') || undefined;
-
-        if (userEmail) {
-          const u = await db.getUser(userEmail);
-          if (u) {
-            setUser(u);
-            if (u.isAdmin) setIsAdmin(true);
-            
-            if (messages.length === 0) {
-              setMessages([{
-                id: 'welcome',
-                role: 'assistant',
-                content: `স্বাগতম ${u.name}! আমি DroidForge AI। আপনার ড্রিম অ্যাপের আইডিয়াটি লিখুন।`,
-                choices: [
-                  { label: "কন্টাক্টস অ্যাপ বানান", prompt: "Build a native contacts list manager app" },
-                  { label: "ক্যামেরা ফিল্টার অ্যাপ", prompt: "Create a camera app with realtime filters" }
-                ],
-                timestamp: Date.now()
-              }]);
-            }
-          }
+    const fetchAndSetUser = async (email: string) => {
+      const u = await db.getUser(email);
+      if (u) {
+        setUser(u);
+        setIsAdmin(!!u.isAdmin);
+        if (messages.length === 0) {
+          setMessages([{
+            id: 'welcome',
+            role: 'assistant',
+            content: `স্বাগতম ${u.name}! আমি DroidForge AI। আপনার ড্রিম অ্যাপের আইডিয়াটি লিখুন।`,
+            choices: [
+              { label: "কন্টাক্টস অ্যাপ বানান", prompt: "Build a native contacts list manager app" },
+              { label: "ক্যামেরা ফিল্টার অ্যাপ", prompt: "Create a camera app with realtime filters" }
+            ],
+            timestamp: Date.now()
+          }]);
         }
-      } catch (e) {
-        console.error("Initialization crash:", e);
-        setInitError(e instanceof Error ? e.message : String(e));
-      } finally {
-        setIsAuthLoading(false);
       }
     };
+
+    // 1. Initial Session Check
+    const init = async () => {
+      try {
+        // If coming back from OAuth, hash will be present. Supabase needs a moment to parse it.
+        const session = await db.getCurrentSession();
+        const forceEmail = localStorage.getItem('df_force_login');
+        const userEmail = session?.user?.email || forceEmail;
+
+        if (userEmail) {
+          await fetchAndSetUser(userEmail);
+        }
+      } catch (e) {
+        console.error("Init error:", e);
+      } finally {
+        // Only stop loading if we're not in the middle of a hash-fragment redirect
+        if (!window.location.hash.includes('access_token')) {
+          setIsAuthLoading(false);
+        }
+      }
+    };
+
+    // 2. Auth Listener for Google Login Redirects
+    const { data: { subscription } } = db.onAuthStateChange(async (event, session) => {
+      console.log("Auth Event:", event);
+      if (event === 'SIGNED_IN' && session?.user?.email) {
+        await fetchAndSetUser(session.user.email);
+        setIsAuthLoading(false);
+      } else if (event === 'SIGNED_OUT') {
+        setUser(null);
+        setIsAdmin(false);
+        setIsAuthLoading(false);
+      }
+    });
+
     init();
+
+    // Safety timeout for loading screen in case hash processing hangs
+    const timer = setTimeout(() => setIsAuthLoading(false), 3000);
+
+    return () => {
+      subscription.unsubscribe();
+      clearTimeout(timer);
+    };
   }, []);
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     const { email, password } = authInput;
+    setIsAuthLoading(true);
     
     try {
       const { session, error } = isSignUp 
@@ -149,11 +165,14 @@ const App: React.FC = () => {
       
       if (error && !session) {
         alert("Authentication Error: " + error.message);
+        setIsAuthLoading(false);
       } else {
-        window.location.reload();
+        // For standard login or master bypass, the listener or init will pick it up
+        if (session) window.location.reload();
       }
     } catch (err) {
-      alert("System Busy. Please try again later.");
+      alert("System Busy.");
+      setIsAuthLoading(false);
     }
   };
 
@@ -188,13 +207,7 @@ const App: React.FC = () => {
       const u = await db.useToken(user.id, user.email, "Code Forge");
       if (u) setUser(u);
     } catch (e) { 
-      console.error(e);
-      setMessages(prev => [...prev, { 
-        id: Date.now().toString(), 
-        role: 'assistant', 
-        content: "দুঃখিত, কোড জেনারেট করার সময় একটি এরর হয়েছে। দয়া করে আবার চেষ্টা করুন।",
-        timestamp: Date.now()
-      }]);
+      setIsGenerating(false);
     } finally { 
       setIsGenerating(false); 
     }
@@ -210,23 +223,9 @@ const App: React.FC = () => {
       await new Promise(r => setTimeout(r, 4000));
       setDeployStep(3);
     } catch (error) {
-      alert("গিটহাব পুশ ফেইল করেছে।");
       setIsDeploying(false);
     }
   };
-
-  if (initError) {
-    return (
-      <div className="h-screen bg-black flex items-center justify-center p-10 text-center">
-        <div className="max-w-md">
-          <ShieldAlert size={64} className="text-red-500 mx-auto mb-6"/>
-          <h1 className="text-2xl font-bold text-white mb-4">Critical System Failure</h1>
-          <p className="text-red-400 bg-red-400/10 p-4 rounded-xl font-mono text-xs">{initError}</p>
-          <button onClick={() => window.location.reload()} className="mt-8 px-8 py-3 bg-white text-black font-bold rounded-full">Retry Uplink</button>
-        </div>
-      </div>
-    );
-  }
 
   if (isAuthLoading) return (
     <div className="h-screen bg-[#020617] flex flex-col items-center justify-center">
@@ -234,7 +233,7 @@ const App: React.FC = () => {
         <Cpu size={64} className="text-cyan-500 absolute inset-0 animate-pulse"/>
         <div className="absolute inset-0 blur-2xl bg-cyan-500/30 animate-pulse rounded-full"></div>
       </div>
-      <div className="text-cyan-500 font-black tracking-[0.5em] text-[10px] uppercase animate-pulse">Establishing Secure Uplink...</div>
+      <div className="text-cyan-500 font-black tracking-[0.5em] text-[10px] uppercase animate-pulse">Synchronizing Session...</div>
     </div>
   );
 
@@ -290,7 +289,7 @@ const App: React.FC = () => {
           <button onClick={handleDeploy} className="px-6 py-2 bg-green-500 rounded-full text-[11px] font-black text-white hover:bg-green-400 flex items-center gap-2 shadow-xl shadow-green-500/20 transition-all">
             <Package size={14}/> BUILD APK
           </button>
-          <button onClick={() => db.signOut().then(() => window.location.reload())} className="p-2.5 text-red-400 hover:bg-red-400/10 rounded-2xl transition-all"><LogOut size={22}/></button>
+          <button onClick={() => db.signOut()} className="p-2.5 text-red-400 hover:bg-red-400/10 rounded-2xl transition-all"><LogOut size={22}/></button>
         </div>
       </header>
 
@@ -302,11 +301,11 @@ const App: React.FC = () => {
                 {messages.map(m => (
                   <div key={m.id} className={`flex flex-col ${m.role === 'user' ? 'items-end' : 'items-start'} animate-in slide-in-from-bottom-8 duration-500`}>
                     <div className={`max-w-[95%] p-7 rounded-[2.5rem] shadow-2xl ${m.role === 'user' ? 'bg-cyan-600 text-white rounded-tr-none' : 'bg-slate-900/90 border border-white/10 text-slate-100 rounded-tl-none'}`}>
-                      <div className="text-[15px] leading-relaxed font-medium whitespace-pre-wrap">{m.content}</div>
+                      <div className="text-[15px] font-medium whitespace-pre-wrap">{m.content}</div>
                       {m.role === 'assistant' && m.choices && (
                         <div className="mt-8 flex flex-wrap gap-2.5">
                           {m.choices.map((c, i) => (
-                            <button key={i} onClick={() => handleSend(c.prompt)} className="px-5 py-3 bg-cyan-500/10 border border-cyan-500/30 rounded-2xl text-[12px] font-bold text-cyan-400 hover:bg-cyan-500 hover:text-black hover:scale-105 active:scale-95 transition-all flex items-center gap-2">
+                            <button key={i} onClick={() => handleSend(c.prompt)} className="px-5 py-3 bg-cyan-500/10 border border-cyan-500/30 rounded-2xl text-[12px] font-bold text-cyan-400 hover:bg-cyan-500 hover:text-black hover:scale-105 transition-all flex items-center gap-2">
                               <Zap size={14}/> {c.label}
                             </button>
                           ))}

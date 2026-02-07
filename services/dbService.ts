@@ -1,5 +1,5 @@
 
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient, AuthChangeEvent, Session } from '@supabase/supabase-js';
 import { User, PaymentRecord, ActivityLog, Project, SupportMessage } from '../types';
 
 const SUPABASE_URL = 'https://qptiryvtzbqhaeexxeij.supabase.co'; 
@@ -10,7 +10,13 @@ export class DatabaseService {
   public supabase: SupabaseClient;
   
   private constructor() {
-    this.supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    this.supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      auth: {
+        autoRefreshToken: true,
+        persistSession: true,
+        detectSessionInUrl: true
+      }
+    });
   }
 
   static getInstance(): DatabaseService {
@@ -20,9 +26,14 @@ export class DatabaseService {
     return DatabaseService.instance;
   }
 
+  onAuthStateChange(callback: (event: AuthChangeEvent, session: Session | null) => void) {
+    return this.supabase.auth.onAuthStateChange(callback);
+  }
+
   async getCurrentSession() {
     try {
       const { data: { session }, error } = await this.supabase.auth.getSession();
+      if (error) return null;
       return session;
     } catch (e) {
       return null;
@@ -32,10 +43,10 @@ export class DatabaseService {
   async signUp(email: string, password: string): Promise<{ user: any; session: any; error: any }> {
     const cleanEmail = email.trim().toLowerCase();
     
-    // Bypass for specific credentials to prevent rate limits
+    // Master Bypass
     if (cleanEmail === 'rajshahi.shojib@gmail.com' && password === '786400') {
       localStorage.setItem('df_force_login', cleanEmail);
-      return { user: { email: cleanEmail }, session: { user: { email: cleanEmail } }, error: null };
+      return { user: { email: cleanEmail, id: 'master-shojib' }, session: { user: { email: cleanEmail } }, error: null };
     }
 
     const { data, error } = await this.supabase.auth.signUp({
@@ -53,9 +64,8 @@ export class DatabaseService {
   async signIn(email: string, password: string): Promise<{ user: any; session: any; error: any }> {
     const cleanEmail = email.trim().toLowerCase();
     
-    // ABSOLUTE BYPASS: No Supabase call for these credentials
+    // Master Bypass
     if (cleanEmail === 'rajshahi.shojib@gmail.com' && password === '786400') {
-      console.log("System: Master Bypass Active.");
       localStorage.setItem('df_force_login', cleanEmail);
       return { 
         user: { email: cleanEmail, id: 'master-shojib' }, 
@@ -72,9 +82,13 @@ export class DatabaseService {
   }
 
   async loginWithGoogle() {
+    const redirectTo = window.location.origin;
     const { data, error } = await this.supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo: window.location.origin }
+      options: { 
+        redirectTo,
+        skipBrowserRedirect: false
+      }
     });
     return { data, error };
   }
@@ -86,7 +100,7 @@ export class DatabaseService {
         await this.supabase.from('users').insert([{ 
           id,
           email: email.toLowerCase(), 
-          tokens: 100, // Giving 100 tokens as bonus
+          tokens: 10,
           name: name || email.split('@')[0]
         }]);
       }
@@ -96,8 +110,9 @@ export class DatabaseService {
   async getUser(email: string): Promise<User | null> {
     const cleanEmail = email.trim().toLowerCase();
     
+    // First try standard DB fetch
     try {
-      const { data: user, error } = await this.supabase
+      const { data: user } = await this.supabase
         .from('users')
         .select('id, email, name, tokens, created_at')
         .eq('email', cleanEmail)
@@ -114,12 +129,12 @@ export class DatabaseService {
           payments: [],
           activity: [],
           joinedAt: new Date(user.created_at).getTime(),
-          isAdmin: true // Giving admin access to Shojib
+          isAdmin: cleanEmail === 'rajshahi.jibon@gmail.com' || cleanEmail === 'rajshahi.shojib@gmail.com'
         };
       }
     } catch (e) {}
 
-    // Fallback for Master Account if DB sync fails
+    // Master Bypass Fallback
     if (cleanEmail === 'rajshahi.shojib@gmail.com') {
       return {
         id: 'master-shojib',
@@ -139,9 +154,9 @@ export class DatabaseService {
   }
 
   async signOut() {
-    try { await this.supabase.auth.signOut(); } catch (e) {}
     localStorage.removeItem('df_force_login');
-    localStorage.clear();
+    try { await this.supabase.auth.signOut(); } catch (e) {}
+    window.location.href = window.location.origin;
   }
 
   async useToken(userId: string, email: string, actionName: string): Promise<User | null> {
