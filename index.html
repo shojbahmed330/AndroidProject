@@ -8,6 +8,10 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script>
+        // Provide a safety fallback for process.env in browser environments
+        window.process = window.process || { env: {} };
+    </script>
     <style>
         :root {
             --primary: #06b6d4;
@@ -85,5 +89,7 @@
 </head>
 <body class="bg-grid">
     <div id="root"></div>
+    <!-- Explicitly load the entry point -->
+    <script type="module" src="index.tsx"></script>
 </body>
 </html>

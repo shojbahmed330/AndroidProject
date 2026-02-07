@@ -11,6 +11,7 @@ import { GeminiService } from './services/geminiService';
 import { DatabaseService } from './services/dbService';
 
 const App: React.FC = () => {
+  const [initError, setInitError] = useState<string | null>(null);
   const db = DatabaseService.getInstance();
   const [user, setUser] = useState<UserType | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -94,13 +95,16 @@ const App: React.FC = () => {
           doc.write(docContent);
           doc.close();
         }
-      } catch (e) {}
+      } catch (e) {
+        console.warn("Iframe injection failed", e);
+      }
     }
   }, [projectFiles, mode]);
 
   useEffect(() => {
     const init = async () => {
       try {
+        console.log("Initializing App...");
         let session = await db.getCurrentSession();
         let userEmail = session?.user?.email || localStorage.getItem('df_force_login') || undefined;
 
@@ -125,7 +129,8 @@ const App: React.FC = () => {
           }
         }
       } catch (e) {
-        console.error("Initialization error:", e);
+        console.error("Initialization crash:", e);
+        setInitError(e instanceof Error ? e.message : String(e));
       } finally {
         setIsAuthLoading(false);
       }
@@ -148,7 +153,7 @@ const App: React.FC = () => {
         window.location.reload();
       }
     } catch (err) {
-      alert("System Busy. Please try again.");
+      alert("System Busy. Please try again later.");
     }
   };
 
@@ -182,7 +187,17 @@ const App: React.FC = () => {
       }]);
       const u = await db.useToken(user.id, user.email, "Code Forge");
       if (u) setUser(u);
-    } catch (e) { console.error(e); } finally { setIsGenerating(false); }
+    } catch (e) { 
+      console.error(e);
+      setMessages(prev => [...prev, { 
+        id: Date.now().toString(), 
+        role: 'assistant', 
+        content: "দুঃখিত, কোড জেনারেট করার সময় একটি এরর হয়েছে। দয়া করে আবার চেষ্টা করুন।",
+        timestamp: Date.now()
+      }]);
+    } finally { 
+      setIsGenerating(false); 
+    }
   };
 
   const handleDeploy = async () => {
@@ -199,6 +214,19 @@ const App: React.FC = () => {
       setIsDeploying(false);
     }
   };
+
+  if (initError) {
+    return (
+      <div className="h-screen bg-black flex items-center justify-center p-10 text-center">
+        <div className="max-w-md">
+          <ShieldAlert size={64} className="text-red-500 mx-auto mb-6"/>
+          <h1 className="text-2xl font-bold text-white mb-4">Critical System Failure</h1>
+          <p className="text-red-400 bg-red-400/10 p-4 rounded-xl font-mono text-xs">{initError}</p>
+          <button onClick={() => window.location.reload()} className="mt-8 px-8 py-3 bg-white text-black font-bold rounded-full">Retry Uplink</button>
+        </div>
+      </div>
+    );
+  }
 
   if (isAuthLoading) return (
     <div className="h-screen bg-[#020617] flex flex-col items-center justify-center">
