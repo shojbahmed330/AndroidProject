@@ -4,11 +4,12 @@ import {
   Send, Smartphone, Loader2, Zap, Cpu, LogOut, Check, Rocket, Settings,
   Download, Globe, Activity, Terminal, ShieldAlert, Package, QrCode, 
   AlertCircle, Key, Mail, ArrowLeft, FileCode, ShoppingCart, User as UserIcon,
-  ChevronRight, Github, Save, Trash2, Square, Circle
+  ChevronRight, Github, Save, Trash2, Square, Circle, RefreshCw
 } from 'lucide-react';
 import { AppMode, ChatMessage, User as UserType, GithubConfig } from './types';
 import { GeminiService } from './services/geminiService';
 import { DatabaseService } from './services/dbService';
+import { GithubService } from './services/githubService';
 
 const DEFAULT_USER: UserType = {
   id: 'dev-mode',
@@ -33,9 +34,14 @@ const App: React.FC = () => {
   const [selectedFile, setSelectedFile] = useState('index.html');
   const [github, setGithub] = useState<GithubConfig>({ token: '', repo: '', owner: '' });
   const [selectedOptions, setSelectedOptions] = useState<string[]>([]);
+  const [logoClicks, setLogoClicks] = useState(0);
+  const [buildStatus, setBuildStatus] = useState<'idle' | 'pushing' | 'building' | 'done'>('idle');
+  const [apkUrl, setApkUrl] = useState<{downloadUrl: string, webUrl: string} | null>(null);
   
   const gemini = useRef(new GeminiService());
+  const githubService = useRef(new GithubService());
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const qrRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -52,6 +58,84 @@ const App: React.FC = () => {
     }
   }, []);
 
+  useEffect(() => {
+    if (logoClicks > 0) {
+      const timer = setTimeout(() => setLogoClicks(0), 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [logoClicks]);
+
+  useEffect(() => {
+    if (buildStatus === 'done' && apkUrl && qrRef.current && (window as any).QRCode) {
+      qrRef.current.innerHTML = '';
+      try {
+        new (window as any).QRCode(qrRef.current, {
+          text: apkUrl.webUrl,
+          width: 140,
+          height: 140,
+          colorDark: "#020617",
+          colorLight: "#ffffff",
+          correctLevel: (window as any).QRCode.CorrectLevel.H
+        });
+      } catch (e) {
+        console.error("QR Generation error", e);
+      }
+    }
+  }, [buildStatus, apkUrl]);
+
+  const handleLogoClick = () => {
+    const nextClicks = logoClicks + 1;
+    if (nextClicks >= 3) {
+      setMode(AppMode.SETTINGS);
+      setLogoClicks(0);
+    } else {
+      setLogoClicks(nextClicks);
+    }
+  };
+
+  const handleBuildAPK = async () => {
+    if (!github.token || !github.owner || !github.repo) {
+      alert("দয়া করে আগে লোগোতে ৩ বার ক্লিক করে গিটহাব সেটিংস ঠিক করুন।");
+      return;
+    }
+    setBuildStatus('pushing');
+    try {
+      await githubService.current.pushToGithub(github, projectFiles);
+      setBuildStatus('building');
+      
+      const poll = async () => {
+        const result = await githubService.current.getLatestApk(github);
+        if (result && typeof result === 'object') {
+          setApkUrl(result);
+          setBuildStatus('done');
+        } else {
+          setTimeout(poll, 10000); // Poll every 10 seconds
+        }
+      };
+      poll();
+    } catch (e) {
+      alert("Error: " + (e as Error).message);
+      setBuildStatus('idle');
+    }
+  };
+
+  const handleDownload = async () => {
+    if (!apkUrl) return;
+    try {
+      const blob = await githubService.current.downloadArtifact(github, apkUrl.downloadUrl);
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${github.repo}-bundle.zip`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (e) {
+      alert("Error during download: " + (e as Error).message);
+    }
+  };
+
   const handleSend = async (customInput?: string) => {
     const text = customInput || input;
     if (!text.trim() || isGenerating) return;
@@ -59,7 +143,7 @@ const App: React.FC = () => {
     const userMsg: ChatMessage = { id: Date.now().toString(), role: 'user', content: text, timestamp: Date.now() };
     setMessages(prev => [...prev, userMsg]);
     setInput('');
-    setSelectedOptions([]); // Reset selections after sending
+    setSelectedOptions([]); 
     setIsGenerating(true);
 
     try {
@@ -97,14 +181,14 @@ const App: React.FC = () => {
       {/* Header */}
       <header className="h-20 border-b border-white/5 glass-card flex items-center justify-between px-8 z-50">
         <div className="flex items-center gap-4">
-          <button onClick={() => setMode(AppMode.SETTINGS)} className="p-3 hover:bg-white/5 rounded-2xl transition-all text-slate-400 hover:text-cyan-400">
-            <Settings size={22}/>
-          </button>
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-cyan-500 rounded-xl flex items-center justify-center shadow-lg active-pulse">
+          <div 
+            onClick={handleLogoClick}
+            className="flex items-center gap-3 cursor-pointer group select-none"
+          >
+            <div className={`w-10 h-10 bg-cyan-500 rounded-xl flex items-center justify-center shadow-lg transition-transform active:scale-90 ${logoClicks > 0 ? 'animate-pulse' : ''}`}>
               <Cpu size={22} className="text-black"/>
             </div>
-            <span className="font-black text-sm uppercase tracking-tighter">OneClick <span className="text-cyan-400">Studio</span></span>
+            <span className="font-black text-sm uppercase tracking-tighter group-hover:text-cyan-400 transition-colors">OneClick <span className="text-cyan-400">Studio</span></span>
           </div>
         </div>
 
@@ -118,6 +202,13 @@ const App: React.FC = () => {
         </nav>
 
         <div className="flex items-center gap-4">
+          <button 
+            onClick={handleBuildAPK}
+            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-cyan-600 to-blue-600 rounded-xl text-xs font-black uppercase tracking-widest shadow-lg hover:scale-105 transition-all"
+          >
+            {buildStatus === 'idle' ? <Rocket size={16}/> : <RefreshCw size={16} className="animate-spin"/>}
+            {buildStatus === 'idle' ? 'Build APK' : buildStatus.toUpperCase() + '...'}
+          </button>
           <div className="px-4 py-2 bg-cyan-500/10 border border-cyan-500/20 rounded-full text-xs font-bold text-cyan-400">{user.tokens} Tokens</div>
           <button className="p-2.5 text-red-400 hover:bg-red-400/10 rounded-xl"><LogOut size={20}/></button>
         </div>
@@ -126,15 +217,49 @@ const App: React.FC = () => {
       <main className="flex-1 flex overflow-hidden">
         {mode === AppMode.PREVIEW || mode === AppMode.EDIT ? (
           <>
-            {/* Left Chat Column */}
             <section className="w-[450px] border-r border-white/5 flex flex-col bg-[#01040f] relative">
               <div className="flex-1 p-8 overflow-y-auto code-scroll space-y-6 pb-40">
+                {/* Build Status Alert */}
+                {buildStatus !== 'idle' && (
+                   <div className="p-5 bg-cyan-500/10 border border-cyan-500/20 rounded-3xl mb-4">
+                      <div className="flex items-center gap-3 mb-2">
+                         <Activity size={16} className={`text-cyan-400 ${buildStatus !== 'done' ? 'animate-pulse' : ''}`}/>
+                         <span className="text-xs font-black uppercase tracking-widest text-cyan-400">
+                           {buildStatus === 'done' ? 'Build Successful' : 'GitHub Build Pipeline Active'}
+                         </span>
+                      </div>
+                      <p className="text-xs text-slate-400 mb-4">
+                        {buildStatus === 'done' 
+                          ? 'আপনার অ্যান্ড্রয়েড এপিকে তৈরি হয়েছে। সরাসরি মোবাইলে ডাউনলোড করতে স্ক্যান করুন।' 
+                          : 'আপনার প্রজেক্ট গিটহাবে পুশ করা হচ্ছে এবং APK বিল্ড শুরু হয়েছে। এতে ১-২ মিনিট সময় লাগতে পারে।'}
+                      </p>
+                      
+                      {buildStatus === 'done' && (
+                        <div className="bg-slate-900/50 p-6 rounded-[2.5rem] border border-white/5 shadow-2xl flex flex-col items-center gap-4 animate-in zoom-in-95">
+                           <div className="bg-white p-4 rounded-3xl shadow-xl overflow-hidden">
+                             <div ref={qrRef}></div>
+                           </div>
+                           <div className="text-center">
+                             <p className="text-[10px] font-black uppercase tracking-[0.2em] text-cyan-400 mb-3 flex items-center justify-center gap-2">
+                               <QrCode size={12}/> Scan for Mobile Install
+                             </p>
+                             <button 
+                                onClick={handleDownload}
+                                className="w-full py-3.5 px-8 bg-cyan-500 text-black font-black uppercase text-[10px] rounded-2xl flex items-center justify-center gap-2 hover:bg-cyan-400 shadow-lg active:scale-95 transition-all"
+                              >
+                                <Download size={14}/> Download Link
+                              </button>
+                           </div>
+                        </div>
+                      )}
+                   </div>
+                )}
+
                 {messages.map((m, idx) => (
                   <div key={m.id} className={`flex flex-col ${m.role === 'user' ? 'items-end' : 'items-start'} animate-in slide-in-from-bottom-4`}>
                     <div className={`max-w-[90%] p-5 rounded-3xl shadow-xl ${m.role === 'user' ? 'bg-cyan-600 text-white rounded-tr-none' : 'bg-slate-900/80 border border-white/5 text-slate-100 rounded-tl-none'}`}>
                       <p className="text-[14px] leading-relaxed whitespace-pre-wrap">{m.content}</p>
                       
-                      {/* Interactive Options Wizard */}
                       {m.role === 'assistant' && m.options && idx === messages.length - 1 && (
                         <div className="mt-5 space-y-3">
                           <p className="text-[10px] font-black text-cyan-400/50 uppercase tracking-widest px-2">
@@ -172,7 +297,6 @@ const App: React.FC = () => {
                         </div>
                       )}
 
-                      {/* Quick Response Choices */}
                       {m.role === 'assistant' && m.choices && (
                         <div className="mt-6 flex flex-wrap gap-2">
                           {m.choices.map((c, i) => (
@@ -189,7 +313,6 @@ const App: React.FC = () => {
                 <div ref={chatEndRef} />
               </div>
 
-              {/* Chat Input Field */}
               <div className="p-8 absolute bottom-0 w-full bg-gradient-to-t from-[#01040f] via-[#01040f] to-transparent">
                 <div className="relative group">
                   <textarea 
@@ -206,7 +329,6 @@ const App: React.FC = () => {
               </div>
             </section>
 
-            {/* Right Display Area */}
             <section className="flex-1 flex flex-col bg-[#020617]">
               {mode === AppMode.EDIT ? (
                 <div className="flex-1 flex overflow-hidden animate-in fade-in duration-500">
@@ -300,7 +422,15 @@ const App: React.FC = () => {
                       <input type="text" value={github.repo} onChange={e => setGithub({...github, repo: e.target.value})} className="w-full bg-slate-900/50 border border-white/5 rounded-3xl p-5 text-sm outline-none focus:border-cyan-500/50" placeholder="my-app"/>
                     </div>
                  </div>
-                 <button className="w-full py-5 bg-cyan-600 rounded-3xl font-black uppercase tracking-[0.2em] text-white mt-4 shadow-2xl hover:bg-cyan-500 hover:shadow-[0_0_40px_rgba(6,182,212,0.3)] transition-all active:scale-95">ESTABLISH CONNECTION</button>
+                 <button 
+                  onClick={() => {
+                    alert("গিটহাব সেটিংস সেভ হয়েছে। এখন 'Build APK' বাটনে ক্লিক করুন।");
+                    setMode(AppMode.PREVIEW);
+                  }}
+                  className="w-full py-5 bg-cyan-600 rounded-3xl font-black uppercase tracking-[0.2em] text-white mt-4 shadow-2xl hover:bg-cyan-500 hover:shadow-[0_0_40px_rgba(6,182,212,0.3)] transition-all active:scale-95"
+                 >
+                   SAVE SETTINGS
+                 </button>
                </div>
                <button onClick={() => setMode(AppMode.PREVIEW)} className="w-full mt-10 text-slate-500 text-[11px] font-black uppercase tracking-widest hover:text-white flex items-center justify-center gap-3 transition-colors"><ArrowLeft size={16}/> Return to Terminal</button>
             </div>
