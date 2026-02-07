@@ -14,7 +14,8 @@ export class DatabaseService {
       auth: {
         autoRefreshToken: true,
         persistSession: true,
-        detectSessionInUrl: true
+        detectSessionInUrl: true,
+        flowType: 'pkce' // আধুনিক ও নিরাপদ ফ্লো
       }
     });
   }
@@ -41,31 +42,33 @@ export class DatabaseService {
 
   async signUp(email: string, password: string) {
     const cleanEmail = email.trim().toLowerCase();
-    
-    // Master Bypass
     if (cleanEmail === 'rajshahi.shojib@gmail.com' && password === '786400') {
       localStorage.setItem('df_force_login', cleanEmail);
       return { user: { email: cleanEmail }, session: { user: { email: cleanEmail } }, error: null };
     }
-
-    return await this.supabase.auth.signUp({ email: cleanEmail, password });
+    return await this.supabase.auth.signUp({ 
+      email: cleanEmail, 
+      password,
+      options: { emailRedirectTo: window.location.origin }
+    });
   }
 
   async signIn(email: string, password: string) {
     const cleanEmail = email.trim().toLowerCase();
-    
     if (cleanEmail === 'rajshahi.shojib@gmail.com' && password === '786400') {
       localStorage.setItem('df_force_login', cleanEmail);
       return { user: { email: cleanEmail }, session: { user: { email: cleanEmail } }, error: null };
     }
-    
     return await this.supabase.auth.signInWithPassword({ email: cleanEmail, password });
   }
 
   async loginWithGoogle() {
     return await this.supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo: window.location.origin }
+      options: { 
+        redirectTo: window.location.origin,
+        queryParams: { access_type: 'offline', prompt: 'consent' }
+      }
     });
   }
 
@@ -73,19 +76,36 @@ export class DatabaseService {
     const cleanEmail = email.trim().toLowerCase();
     
     try {
-      // ১. প্রথমে ডেটাবেস থেকে ইউজার খোঁজা
-      let { data: user } = await this.supabase
+      // ১. মাস্টার বাইপাস চেক
+      if (cleanEmail === 'rajshahi.shojib@gmail.com') {
+        return {
+          id: 'master-shojib',
+          email: cleanEmail,
+          name: 'Shojib Master',
+          avatar_url: `https://api.dicebear.com/7.x/avataaars/svg?seed=Shojib`,
+          tokens: 999,
+          isLoggedIn: true,
+          payments: [],
+          activity: [],
+          joinedAt: Date.now(),
+          isAdmin: true
+        };
+      }
+
+      // ২. সুপাবেস টেবিল থেকে ইউজার খোঁজা
+      let { data: user, error: fetchError } = await this.supabase
         .from('users')
         .select('*')
         .eq('email', cleanEmail)
         .maybeSingle();
       
-      // ২. যদি ইউজার অথেনটিকেটেড থাকে কিন্তু টেবিলে না থাকে (যেমন নতুন Google User), তবে নতুন প্রোফাইল তৈরি করা
+      // ৩. যদি ইউজার সেশন থাকে কিন্তু ডেটাবেসে প্রোফাইল না থাকে, তবে প্রোফাইল তৈরি করা
       if (!user && id) {
+        console.log("Creating new user profile for:", cleanEmail);
         const { data: newUser, error: createError } = await this.supabase
           .from('users')
           .insert([{ 
-            id,
+            id: id,
             email: cleanEmail, 
             tokens: 10,
             name: cleanEmail.split('@')[0]
@@ -94,6 +114,7 @@ export class DatabaseService {
           .single();
         
         if (!createError) user = newUser;
+        else console.error("Profile Creation Failed:", createError);
       }
       
       if (user) {
@@ -111,25 +132,8 @@ export class DatabaseService {
         };
       }
     } catch (e) {
-      console.error("Database getUser Error:", e);
+      console.error("Critical getUser Error:", e);
     }
-
-    // Master Bypass Fallback
-    if (cleanEmail === 'rajshahi.shojib@gmail.com') {
-      return {
-        id: 'master-shojib',
-        email: cleanEmail,
-        name: 'Shojib Master',
-        avatar_url: `https://api.dicebear.com/7.x/avataaars/svg?seed=Shojib`,
-        tokens: 999,
-        isLoggedIn: true,
-        payments: [],
-        activity: [],
-        joinedAt: Date.now(),
-        isAdmin: true
-      };
-    }
-
     return null;
   }
 
@@ -139,7 +143,7 @@ export class DatabaseService {
     window.location.href = window.location.origin;
   }
 
-  async useToken(userId: string, email: string, actionName: string): Promise<User | null> {
+  async useToken(userId: string, email: string): Promise<User | null> {
     if (email === 'rajshahi.shojib@gmail.com') return this.getUser(email);
     try {
       const { data: user } = await this.supabase.from('users').select('tokens').eq('id', userId).single();

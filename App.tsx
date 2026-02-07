@@ -19,33 +19,24 @@ const App: React.FC = () => {
   const [input, setInput] = useState('');
   const [mode, setMode] = useState<AppMode>(AppMode.PREVIEW);
   const [isGenerating, setIsGenerating] = useState(false);
-  const [isDeploying, setIsDeploying] = useState(false);
-  const [deployStep, setDeployStep] = useState(0); 
-  const [showSettings, setShowSettings] = useState(false);
   const [projectFiles, setProjectFiles] = useState<Record<string, string>>({
-    'index.html': '<html><body><h1>DroidForge Ready</h1></body></html>',
-    'styles.css': 'body { background: #020617; color: cyan; }',
+    'index.html': '<html><body style="background:#020617;color:cyan;display:flex;align-items:center;justify-content:center;height:100vh;font-family:sans-serif;"><h1>DroidForge System Active</h1></body></html>',
+    'styles.css': '',
     'main.js': ''
   });
   
-  const [activeFile, setActiveFile] = useState<string>('index.html');
-  const [ghConfig, setGhConfig] = useState({
-    owner: localStorage.getItem('df_gh_owner') || '',
-    repo: localStorage.getItem('df_gh_repo') || '',
-    token: localStorage.getItem('df_gh_token') || ''
-  });
-
   const gemini = useRef(new GeminiService());
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
+  // Sync scroll on chat
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isGenerating]);
 
-  // Handle Auth State
+  // Auth Management
   useEffect(() => {
-    const fetchUserData = async (email: string, id?: string) => {
+    const loadUser = async (email: string, id?: string) => {
       const u = await db.getUser(email, id);
       if (u) {
         setUser(u);
@@ -54,10 +45,10 @@ const App: React.FC = () => {
           setMessages([{
             id: 'welcome',
             role: 'assistant',
-            content: `স্বাগতম ${u.name}! আমি DroidForge AI। আপনার ড্রিম অ্যাপের আইডিয়াটি লিখুন।`,
+            content: `স্বাগতম ${u.name}! আমি DroidForge AI। আপনার অ্যাপ আইডিয়া দিন।`,
             choices: [
-              { label: "কন্টাক্টস অ্যাপ বানান", prompt: "Build a native contacts list manager app" },
-              { label: "ক্যামেরা ফিল্টার অ্যাপ", prompt: "Create a camera app with realtime filters" }
+              { label: "কন্টাক্টস অ্যাপ বানান", prompt: "Build a native contacts manager" },
+              { label: "ফ্ল্যাশলাইট অ্যাপ", prompt: "Build a native flashlight controller" }
             ],
             timestamp: Date.now()
           }]);
@@ -65,39 +56,48 @@ const App: React.FC = () => {
       }
     };
 
-    const checkInitialSession = async () => {
+    // ১. ইনিশিয়াল চেক
+    const initAuth = async () => {
       try {
         const session = await db.getCurrentSession();
         const forceEmail = localStorage.getItem('df_force_login');
-        const effectiveEmail = session?.user?.email || forceEmail;
+        const email = session?.user?.email || forceEmail;
 
-        if (effectiveEmail) {
-          await fetchUserData(effectiveEmail, session?.user?.id);
+        if (email) {
+          await loadUser(email, session?.user?.id);
         }
+      } catch (e) {
+        console.error("Auth initialization failed");
       } finally {
-        // If there's no hash (OAuth callback), we stop loading. 
-        // If there IS a hash, the listener below will handle it.
-        if (!window.location.hash) setIsAuthLoading(false);
+        // যদি ইউআরএল এ সেশন টোকেন থাকে, তবে লিসেনার হ্যান্ডেল করবে। 
+        // নাহলে লোডিং বন্ধ।
+        if (!window.location.hash.includes('access_token')) {
+          setIsAuthLoading(false);
+        }
       }
     };
 
+    // ২. রিয়েল টাইম অথ লিসেনার (Google Login এর জন্য জরুরি)
     const { data: { subscription } } = db.onAuthStateChange(async (event, session) => {
-      console.log("Auth Event Triggered:", event);
+      console.log("Auth State Changed:", event);
       if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session?.user?.email) {
-        await fetchUserData(session.user.email, session.user.id);
+        await loadUser(session.user.email, session.user.id);
         setIsAuthLoading(false);
       } else if (event === 'SIGNED_OUT') {
         setUser(null);
+        setIsAdmin(false);
         setIsAuthLoading(false);
       }
     });
 
-    checkInitialSession();
-    const safetyTimer = setTimeout(() => setIsAuthLoading(false), 5000);
+    initAuth();
+
+    // সেফটি টাইমার (যদি সুপাবেস রেসপন্স না দেয়)
+    const timer = setTimeout(() => setIsAuthLoading(false), 4000);
 
     return () => {
       subscription.unsubscribe();
-      clearTimeout(safetyTimer);
+      clearTimeout(timer);
     };
   }, []);
 
@@ -112,10 +112,10 @@ const App: React.FC = () => {
         alert(error.message);
         setIsAuthLoading(false);
       } else if (session) {
-        // Successful login will be caught by onAuthStateChange
+        // সাকসেসফুল লগইন লিসেনার এর মাধ্যমে হ্যান্ডেল হবে
       }
     } catch (err) {
-      alert("System busy.");
+      alert("System Busy.");
       setIsAuthLoading(false);
     }
   };
@@ -130,7 +130,7 @@ const App: React.FC = () => {
       const result = await gemini.current.generateWebsite(text, projectFiles, undefined, messages.slice(-5));
       if (result.files) setProjectFiles(result.files);
       setMessages(prev => [...prev, { id: (Date.now()+1).toString(), role: 'assistant', content: result.answer, choices: result.choices, timestamp: Date.now() }]);
-      const u = await db.useToken(user.id, user.email, "Code Forge");
+      const u = await db.useToken(user.id, user.email);
       if (u) setUser(u);
     } finally { setIsGenerating(false); }
   };
@@ -141,7 +141,7 @@ const App: React.FC = () => {
         <Cpu size={60} className="text-cyan-500 animate-pulse absolute inset-0"/>
         <div className="absolute inset-0 blur-xl bg-cyan-500/20 animate-pulse rounded-full"></div>
       </div>
-      <div className="text-cyan-500 font-black tracking-[0.4em] text-[10px] uppercase animate-pulse">Syncing Secure Uplink...</div>
+      <div className="text-cyan-500 font-black tracking-[0.4em] text-[10px] uppercase animate-pulse">Syncing Secure Core...</div>
     </div>
   );
 
@@ -150,20 +150,20 @@ const App: React.FC = () => {
       <div className="max-w-md w-full glass-card p-12 rounded-[4rem] border-cyan-500/20 text-center animate-in fade-in zoom-in-95 duration-500">
         <div className="w-20 h-20 bg-cyan-500 rounded-2xl mx-auto flex items-center justify-center mb-8 shadow-2xl active-pulse"><Cpu size={40} className="text-black"/></div>
         <h1 className="text-3xl font-black text-white uppercase tracking-tighter mb-4">DroidForge <span className="text-cyan-400">Pro</span></h1>
-        <p className="text-white/40 text-[10px] font-black uppercase tracking-[0.3em] mb-8">{isSignUp ? 'New Account Registration' : 'Secure Core Access'}</p>
+        <p className="text-white/40 text-[10px] font-black uppercase tracking-[0.3em] mb-8">{isSignUp ? 'Registration Module' : 'System Authorization'}</p>
         <form onSubmit={handleAuth} className="space-y-4">
           <input required type="email" value={authInput.email} onChange={e => setAuthInput(p => ({...p, email: e.target.value}))} className="w-full bg-slate-900 border border-white/10 rounded-3xl p-5 text-white outline-none focus:border-cyan-500/50 transition-all" placeholder="Email Address" />
-          <input required type="password" value={authInput.password} onChange={e => setAuthInput(p => ({...p, password: e.target.value}))} className="w-full bg-slate-900 border border-white/10 rounded-3xl p-5 text-white outline-none focus:border-cyan-500/50 transition-all" placeholder="Security Password" />
+          <input required type="password" value={authInput.password} onChange={e => setAuthInput(p => ({...p, password: e.target.value}))} className="w-full bg-slate-900 border border-white/10 rounded-3xl p-5 text-white outline-none focus:border-cyan-500/50 transition-all" placeholder="Security Token (Pass)" />
           <button type="submit" className="w-full py-5 bg-cyan-600 rounded-3xl font-black uppercase tracking-widest text-white shadow-xl hover:bg-cyan-500 active:scale-95 transition-all mt-4">
-            {isSignUp ? 'Create Account' : 'Initialize Session'}
+            {isSignUp ? 'Generate Account' : 'Initialize Core'}
           </button>
         </form>
         <div className="mt-8 pt-8 border-t border-white/5 space-y-4">
           <button onClick={() => db.loginWithGoogle()} className="w-full py-4 bg-white/5 border border-white/10 rounded-3xl text-sm font-bold flex items-center justify-center gap-3 hover:bg-white/10 transition-all">
-            <Globe size={18} className="text-cyan-400"/> Login with Google
+            <Globe size={18} className="text-cyan-400"/> Google Neural Link
           </button>
           <p className="text-white/30 text-[11px] font-medium tracking-wide">
-            {isSignUp ? 'Already have an account?' : "Need a new account?"} 
+            {isSignUp ? 'Already have an ID?' : "Need a new access?"} 
             <button onClick={() => setIsSignUp(!isSignUp)} className="ml-2 text-cyan-400 font-black hover:underline uppercase tracking-widest">{isSignUp ? 'Sign In' : 'Sign Up'}</button>
           </p>
         </div>
