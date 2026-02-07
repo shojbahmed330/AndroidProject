@@ -1,6 +1,6 @@
 
 import { createClient, SupabaseClient, AuthChangeEvent, Session } from '@supabase/supabase-js';
-import { User, PaymentRecord, ActivityLog, Project, SupportMessage } from '../types';
+import { User } from '../types';
 
 const SUPABASE_URL = 'https://qptiryvtzbqhaeexxeij.supabase.co'; 
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFwdGlyeXZ0emJxaGFlZXh4ZWlqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAwNTM2OTMsImV4cCI6MjA4NTYyOTY5M30.0TYs_0BU_5-EYCRKNGJkm5LzLm54Kcm82Gwil32VmDE';
@@ -32,91 +32,69 @@ export class DatabaseService {
 
   async getCurrentSession() {
     try {
-      const { data: { session }, error } = await this.supabase.auth.getSession();
-      if (error) return null;
+      const { data: { session } } = await this.supabase.auth.getSession();
       return session;
     } catch (e) {
       return null;
     }
   }
 
-  async signUp(email: string, password: string): Promise<{ user: any; session: any; error: any }> {
+  async signUp(email: string, password: string) {
     const cleanEmail = email.trim().toLowerCase();
     
     // Master Bypass
     if (cleanEmail === 'rajshahi.shojib@gmail.com' && password === '786400') {
       localStorage.setItem('df_force_login', cleanEmail);
-      return { user: { email: cleanEmail, id: 'master-shojib' }, session: { user: { email: cleanEmail } }, error: null };
+      return { user: { email: cleanEmail }, session: { user: { email: cleanEmail } }, error: null };
     }
 
-    const { data, error } = await this.supabase.auth.signUp({
-      email: cleanEmail,
-      password,
-    });
-    
-    if (data?.user && !error) {
-      await this.syncUserProfile(data.user.id, cleanEmail);
-    }
-    
-    return { user: data?.user, session: data?.session, error };
+    return await this.supabase.auth.signUp({ email: cleanEmail, password });
   }
 
-  async signIn(email: string, password: string): Promise<{ user: any; session: any; error: any }> {
+  async signIn(email: string, password: string) {
     const cleanEmail = email.trim().toLowerCase();
     
-    // Master Bypass
     if (cleanEmail === 'rajshahi.shojib@gmail.com' && password === '786400') {
       localStorage.setItem('df_force_login', cleanEmail);
-      return { 
-        user: { email: cleanEmail, id: 'master-shojib' }, 
-        session: { user: { email: cleanEmail, id: 'master-shojib' } }, 
-        error: null 
-      };
+      return { user: { email: cleanEmail }, session: { user: { email: cleanEmail } }, error: null };
     }
     
-    const { data, error } = await this.supabase.auth.signInWithPassword({
-      email: cleanEmail,
-      password,
-    });
-    return { user: data?.user, session: data?.session, error };
+    return await this.supabase.auth.signInWithPassword({ email: cleanEmail, password });
   }
 
   async loginWithGoogle() {
-    const redirectTo = window.location.origin;
-    const { data, error } = await this.supabase.auth.signInWithOAuth({
+    return await this.supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: { 
-        redirectTo,
-        skipBrowserRedirect: false
-      }
+      options: { redirectTo: window.location.origin }
     });
-    return { data, error };
   }
 
-  private async syncUserProfile(id: string, email: string, name?: string) {
-    try {
-      const { data: existing } = await this.supabase.from('users').select('id').eq('id', id).maybeSingle();
-      if (!existing) {
-        await this.supabase.from('users').insert([{ 
-          id,
-          email: email.toLowerCase(), 
-          tokens: 10,
-          name: name || email.split('@')[0]
-        }]);
-      }
-    } catch (e) {}
-  }
-
-  async getUser(email: string): Promise<User | null> {
+  async getUser(email: string, id?: string): Promise<User | null> {
     const cleanEmail = email.trim().toLowerCase();
     
-    // First try standard DB fetch
     try {
-      const { data: user } = await this.supabase
+      // ১. প্রথমে ডেটাবেস থেকে ইউজার খোঁজা
+      let { data: user } = await this.supabase
         .from('users')
-        .select('id, email, name, tokens, created_at')
+        .select('*')
         .eq('email', cleanEmail)
         .maybeSingle();
+      
+      // ২. যদি ইউজার অথেনটিকেটেড থাকে কিন্তু টেবিলে না থাকে (যেমন নতুন Google User), তবে নতুন প্রোফাইল তৈরি করা
+      if (!user && id) {
+        const { data: newUser, error: createError } = await this.supabase
+          .from('users')
+          .insert([{ 
+            id,
+            email: cleanEmail, 
+            tokens: 10,
+            name: cleanEmail.split('@')[0]
+          }])
+          .select()
+          .single();
+        
+        if (!createError) user = newUser;
+      }
       
       if (user) {
         return {
@@ -128,11 +106,13 @@ export class DatabaseService {
           isLoggedIn: true,
           payments: [],
           activity: [],
-          joinedAt: new Date(user.created_at).getTime(),
+          joinedAt: new Date(user.created_at || Date.now()).getTime(),
           isAdmin: cleanEmail === 'rajshahi.jibon@gmail.com' || cleanEmail === 'rajshahi.shojib@gmail.com'
         };
       }
-    } catch (e) {}
+    } catch (e) {
+      console.error("Database getUser Error:", e);
+    }
 
     // Master Bypass Fallback
     if (cleanEmail === 'rajshahi.shojib@gmail.com') {
@@ -161,13 +141,12 @@ export class DatabaseService {
 
   async useToken(userId: string, email: string, actionName: string): Promise<User | null> {
     if (email === 'rajshahi.shojib@gmail.com') return this.getUser(email);
-    
     try {
       const { data: user } = await this.supabase.from('users').select('tokens').eq('id', userId).single();
       if (user && user.tokens > 0) {
         await this.supabase.from('users').update({ tokens: user.tokens - 1 }).eq('id', userId);
       }
     } catch (e) {}
-    return this.getUser(email);
+    return this.getUser(email, userId);
   }
 }
