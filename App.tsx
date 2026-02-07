@@ -61,14 +61,14 @@ const LoginPage: React.FC<{ onLoginSuccess: (user: UserType) => void }> = ({ onL
   };
 
   return (
-    <div className="h-screen w-full flex flex-col items-center justify-center bg-[#0f172a] text-white relative overflow-hidden font-sans p-4">
+    <div className="h-screen w-full flex flex-col items-center justify-start pt-16 md:justify-center md:pt-0 bg-[#0f172a] text-white relative overflow-hidden font-sans p-4">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-blue-900/20 via-transparent to-transparent opacity-50"></div>
       
       {step === 'scan' ? (
-        <div className="flex flex-col items-center justify-center text-center animate-in fade-in zoom-in duration-700">
+        <div className="flex flex-col items-center text-center animate-in fade-in zoom-in duration-700">
           {/* Welcome Message */}
-          <div className="mb-12 space-y-3 animate-in fade-in slide-in-from-top-8 duration-1000">
-            <h1 className="text-4xl md:text-6xl font-black tracking-tighter bg-clip-text text-transparent bg-gradient-to-br from-white via-cyan-400 to-blue-600 drop-shadow-[0_0_20px_rgba(6,182,212,0.3)]">
+          <div className="mb-10 md:mb-12 space-y-3 animate-in fade-in slide-in-from-top-8 duration-1000">
+            <h1 className="text-4xl md:text-6xl font-black tracking-tighter bg-clip-text text-transparent bg-gradient-to-br from-white via-cyan-400 to-blue-600 drop-shadow-[0_0_20px_rgba(6,182,212,0.3)] px-4">
               Welcome to OneClick Studio
             </h1>
             <p className="text-[10px] md:text-xs font-black uppercase tracking-[0.4em] text-slate-500 opacity-60">
@@ -78,7 +78,7 @@ const LoginPage: React.FC<{ onLoginSuccess: (user: UserType) => void }> = ({ onL
 
           <div 
             onClick={!isScanning ? handleStartAuth : undefined}
-            className={`relative w-36 h-36 md:w-48 md:h-48 flex items-center justify-center cursor-pointer transition-transform active:scale-95 group mb-8`}
+            className={`relative w-36 h-36 md:w-48 md:h-48 flex items-center justify-center cursor-pointer transition-transform active:scale-95 group mb-8 md:mb-12`}
           >
             <div className={`absolute inset-0 bg-blue-500/10 rounded-full blur-3xl group-hover:bg-blue-500/20 transition-all ${!isScanning ? 'animate-pulse' : ''}`}></div>
             
@@ -97,7 +97,7 @@ const LoginPage: React.FC<{ onLoginSuccess: (user: UserType) => void }> = ({ onL
             )}
           </div>
 
-          <h2 className={`text-lg md:text-xl font-bold tracking-widest uppercase transition-colors duration-500 ${isScanning ? 'text-cyan-400' : 'text-slate-400'}`}>
+          <h2 className={`text-sm md:text-xl font-bold tracking-widest uppercase transition-colors duration-500 ${isScanning ? 'text-cyan-400' : 'text-slate-400'}`}>
             {isScanning ? 'Identity Scanning...' : 'Touch sensor to access system'}
           </h2>
 
@@ -112,7 +112,7 @@ const LoginPage: React.FC<{ onLoginSuccess: (user: UserType) => void }> = ({ onL
           `}</style>
         </div>
       ) : (
-        <div className="relative w-full max-w-[400px] h-[500px] [perspective:1200px] animate-in fade-in zoom-in-95 duration-500">
+        <div className="relative w-full max-w-[400px] h-[500px] [perspective:1200px] animate-in fade-in zoom-in-95 duration-500 mt-4 md:mt-0">
           <div className={`relative w-full h-full transition-transform duration-1000 [transform-style:preserve-3d] ${isRegister ? '[transform:rotateY(-90deg)]' : ''}`}>
             {/* Login Face */}
             <div className="absolute inset-0 [backface-visibility:hidden] bg-white/5 backdrop-blur-xl border border-white/10 rounded-[2rem] md:rounded-[2.5rem] p-6 md:p-10 flex flex-col justify-center shadow-2xl [transform:translateZ(150px)] md:[transform:translateZ(200px)]">
