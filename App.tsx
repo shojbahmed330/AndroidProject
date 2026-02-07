@@ -27,9 +27,23 @@ const LoginPage: React.FC<{ onLoginSuccess: (user: UserType) => void }> = ({ onL
   const [step, setStep] = useState<'scan' | 'auth'>('scan');
   const [isScanning, setIsScanning] = useState(false);
   const [isRegister, setIsRegister] = useState(false);
-  const [formData, setFormData] = useState({ email: '', password: '', name: '' });
+  const [isResetting, setIsResetting] = useState(false);
+  const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
+  const [formData, setFormData] = useState({ email: '', password: '', name: '', confirmPassword: '' });
   const [isLoading, setIsLoading] = useState(false);
   const db = DatabaseService.getInstance();
+
+  useEffect(() => {
+    // Detect password recovery mode from URL hash (Supabase style)
+    const handleRecovery = async () => {
+      const { data: { session } } = await db.supabase.auth.getSession();
+      if (session && window.location.hash.includes('type=recovery')) {
+        setIsUpdatingPassword(true);
+        setStep('auth'); // Bypass biometric scan
+      }
+    };
+    handleRecovery();
+  }, []);
 
   const handleStartAuth = () => {
     setIsScanning(true);
@@ -55,6 +69,53 @@ const LoginPage: React.FC<{ onLoginSuccess: (user: UserType) => void }> = ({ onL
       }
     } catch (error: any) {
       alert(error.message || "Authentication Failed");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleGoogleLogin = async () => {
+    setIsLoading(true);
+    try {
+      const { error } = await db.loginWithGoogle();
+      if (error) throw error;
+    } catch (error: any) {
+      alert(error.message || "Google Login Failed");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formData.email) return alert("দয়া করে ইমেইল দিন।");
+    setIsLoading(true);
+    try {
+      const { error } = await db.resetPassword(formData.email);
+      if (error) throw error;
+      alert("আপনার ইমেইলে পাসওয়ার্ড রিসেট লিঙ্ক পাঠানো হয়েছে।");
+      setIsResetting(false);
+    } catch (error: any) {
+      alert(error.message || "পাসওয়ার্ড রিসেট লিঙ্ক পাঠাতে সমস্যা হয়েছে।");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleUpdatePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (formData.password !== formData.confirmPassword) {
+      return alert("পাসওয়ার্ড দুটি মিলছে না।");
+    }
+    setIsLoading(true);
+    try {
+      const { error } = await db.updatePassword(formData.password);
+      if (error) throw error;
+      alert("পাসওয়ার্ড সফলভাবে পরিবর্তন হয়েছে। এখন লগইন করুন।");
+      setIsUpdatingPassword(false);
+      // Directly back to login form (already in step 'auth')
+    } catch (error: any) {
+      alert(error.message || "পাসওয়ার্ড আপডেট করতে সমস্যা হয়েছে।");
     } finally {
       setIsLoading(false);
     }
@@ -112,53 +173,163 @@ const LoginPage: React.FC<{ onLoginSuccess: (user: UserType) => void }> = ({ onL
           `}</style>
         </div>
       ) : (
-        <div className="relative w-full max-w-[400px] h-[480px] md:h-[500px] [perspective:1200px] animate-in fade-in zoom-in-95 duration-500 mt-2 md:mt-0">
+        <div className="relative w-full max-w-[400px] h-[520px] md:h-[580px] [perspective:1200px] animate-in fade-in zoom-in-95 duration-500 mt-2 md:mt-0">
           <div className={`relative w-full h-full transition-transform duration-1000 [transform-style:preserve-3d] ${isRegister ? '[transform:rotateY(-90deg)]' : ''}`}>
-            {/* Login Face */}
+            
+            {/* Login, Reset & Update Face */}
             <div className="absolute inset-0 [backface-visibility:hidden] bg-white/5 backdrop-blur-xl border border-white/10 rounded-[2rem] md:rounded-[2.5rem] p-6 md:p-10 flex flex-col justify-center shadow-2xl [transform:translateZ(150px)] md:[transform:translateZ(200px)]">
-              <h2 className="text-2xl md:text-3xl font-black mb-6 md:mb-8 tracking-tight">System <span className="text-cyan-400">Login</span></h2>
-              <form onSubmit={handleAuth} className="space-y-4">
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 ml-4">Access Email</label>
-                  <div className="relative">
-                    <Mail size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" />
-                    <input 
-                      type="email" 
-                      required
-                      value={formData.email}
-                      onChange={(e) => setFormData({...formData, email: e.target.value})}
-                      className="w-full bg-black/40 border border-white/5 rounded-2xl p-4 pl-12 outline-none focus:border-cyan-500/50 transition-all text-sm" 
-                      placeholder="dev@oneclick.studio"
-                    />
+              {isUpdatingPassword ? (
+                <div className="space-y-6">
+                  <div>
+                    <h2 className="text-2xl md:text-3xl font-black tracking-tight">Set New <span className="text-cyan-400">Token</span></h2>
+                    <p className="text-[10px] text-slate-500 mt-2 font-bold uppercase tracking-widest">Update your system access credentials</p>
                   </div>
+                  <form onSubmit={handleUpdatePassword} className="space-y-4">
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 ml-4">New Access Token</label>
+                      <div className="relative">
+                        <Lock size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" />
+                        <input 
+                          type="password" 
+                          required
+                          value={formData.password}
+                          onChange={(e) => setFormData({...formData, password: e.target.value})}
+                          className="w-full bg-black/40 border border-white/5 rounded-2xl p-4 pl-12 outline-none focus:border-cyan-500/50 transition-all text-sm" 
+                          placeholder="••••••••"
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 ml-4">Confirm New Token</label>
+                      <div className="relative">
+                        <Check size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" />
+                        <input 
+                          type="password" 
+                          required
+                          value={formData.confirmPassword}
+                          onChange={(e) => setFormData({...formData, confirmPassword: e.target.value})}
+                          className="w-full bg-black/40 border border-white/5 rounded-2xl p-4 pl-12 outline-none focus:border-cyan-500/50 transition-all text-sm" 
+                          placeholder="••••••••"
+                        />
+                      </div>
+                    </div>
+                    <button 
+                      disabled={isLoading}
+                      className="w-full py-4 bg-cyan-600 rounded-2xl font-black uppercase tracking-widest text-sm shadow-xl hover:bg-cyan-500 transition-all active:scale-95 flex items-center justify-center gap-2"
+                    >
+                      {isLoading ? <Loader2 className="animate-spin" /> : 'Save New Token'}
+                    </button>
+                    <button 
+                      type="button"
+                      onClick={() => setIsUpdatingPassword(false)}
+                      className="w-full text-xs text-slate-400 font-bold hover:text-white"
+                    >
+                      Cancel Recovery
+                    </button>
+                  </form>
                 </div>
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 ml-4">Access Token</label>
-                  <div className="relative">
-                    <Lock size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" />
-                    <input 
-                      type="password" 
-                      required
-                      value={formData.password}
-                      onChange={(e) => setFormData({...formData, password: e.target.value})}
-                      className="w-full bg-black/40 border border-white/5 rounded-2xl p-4 pl-12 outline-none focus:border-cyan-500/50 transition-all text-sm" 
-                      placeholder="••••••••"
-                    />
+              ) : isResetting ? (
+                <div className="space-y-6">
+                  <div>
+                    <h2 className="text-2xl md:text-3xl font-black tracking-tight">Recovery <span className="text-cyan-400">Mode</span></h2>
+                    <p className="text-[10px] text-slate-500 mt-2 font-bold uppercase tracking-widest">Send reset link to your email</p>
                   </div>
+                  <form onSubmit={handleResetPassword} className="space-y-4">
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 ml-4">Account Email</label>
+                      <div className="relative">
+                        <Mail size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" />
+                        <input 
+                          type="email" 
+                          required
+                          value={formData.email}
+                          onChange={(e) => setFormData({...formData, email: e.target.value})}
+                          className="w-full bg-black/40 border border-white/5 rounded-2xl p-4 pl-12 outline-none focus:border-cyan-500/50 transition-all text-sm" 
+                          placeholder="dev@oneclick.studio"
+                        />
+                      </div>
+                    </div>
+                    <button 
+                      disabled={isLoading}
+                      className="w-full py-4 bg-cyan-600 rounded-2xl font-black uppercase tracking-widest text-sm shadow-xl hover:bg-cyan-500 transition-all active:scale-95 flex items-center justify-center gap-2"
+                    >
+                      {isLoading ? <Loader2 className="animate-spin" /> : 'Send Recovery Link'}
+                    </button>
+                    <button 
+                      type="button"
+                      onClick={() => setIsResetting(false)}
+                      className="w-full text-xs text-slate-400 font-bold hover:text-white flex items-center justify-center gap-2"
+                    >
+                      <ArrowLeft size={14}/> Back to System Login
+                    </button>
+                  </form>
                 </div>
-                <button 
-                  disabled={isLoading}
-                  className="w-full py-4 bg-blue-600 rounded-2xl font-black uppercase tracking-widest text-sm shadow-xl hover:bg-blue-500 transition-all active:scale-95 flex items-center justify-center gap-2"
-                >
-                  {isLoading ? <Loader2 className="animate-spin" /> : 'Execute Login'}
-                </button>
-              </form>
-              <button 
-                onClick={() => setIsRegister(true)}
-                className="mt-6 text-xs text-cyan-400 font-bold hover:underline"
-              >
-                No account? Create system entry
-              </button>
+              ) : (
+                <div className="space-y-6">
+                  <h2 className="text-2xl md:text-3xl font-black tracking-tight">System <span className="text-cyan-400">Login</span></h2>
+                  <form onSubmit={handleAuth} className="space-y-4">
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 ml-4">Access Email</label>
+                      <div className="relative">
+                        <Mail size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" />
+                        <input 
+                          type="email" 
+                          required
+                          value={formData.email}
+                          onChange={(e) => setFormData({...formData, email: e.target.value})}
+                          className="w-full bg-black/40 border border-white/5 rounded-2xl p-4 pl-12 outline-none focus:border-cyan-500/50 transition-all text-sm" 
+                          placeholder="dev@oneclick.studio"
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between px-4">
+                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-500">Access Token</label>
+                        <button type="button" onClick={() => setIsResetting(true)} className="text-[9px] font-bold text-cyan-400 hover:text-white uppercase tracking-wider transition-colors">Forgot Token?</button>
+                      </div>
+                      <div className="relative">
+                        <Lock size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" />
+                        <input 
+                          type="password" 
+                          required
+                          value={formData.password}
+                          onChange={(e) => setFormData({...formData, password: e.target.value})}
+                          className="w-full bg-black/40 border border-white/5 rounded-2xl p-4 pl-12 outline-none focus:border-cyan-500/50 transition-all text-sm" 
+                          placeholder="••••••••"
+                        />
+                      </div>
+                    </div>
+                    <button 
+                      disabled={isLoading}
+                      className="w-full py-4 bg-blue-600 rounded-2xl font-black uppercase tracking-widest text-sm shadow-xl hover:bg-blue-500 transition-all active:scale-95 flex items-center justify-center gap-2"
+                    >
+                      {isLoading ? <Loader2 className="animate-spin" /> : 'Execute Login'}
+                    </button>
+                    
+                    <div className="flex items-center gap-4 py-2">
+                      <hr className="flex-1 opacity-10 border-white"/>
+                      <span className="text-[9px] font-black opacity-30 tracking-[0.2em]">IDENTITY PROVIDER</span>
+                      <hr className="flex-1 opacity-10 border-white"/>
+                    </div>
+
+                    <button 
+                      type="button"
+                      onClick={handleGoogleLogin}
+                      disabled={isLoading}
+                      className="w-full py-3.5 bg-white/5 border border-white/10 rounded-2xl font-bold text-xs flex items-center justify-center gap-3 hover:bg-white/10 transition-all active:scale-95"
+                    >
+                      <Globe size={18} className="text-cyan-400"/>
+                      Continue with Google Access
+                    </button>
+                  </form>
+                  <button 
+                    onClick={() => setIsRegister(true)}
+                    className="mt-4 text-xs text-cyan-400 font-bold hover:underline"
+                  >
+                    No account? Create system entry
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* Register Face */}
