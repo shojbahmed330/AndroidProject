@@ -39,7 +39,7 @@ const App: React.FC = () => {
   // Auth Initialization & Logic
   useEffect(() => {
     const loadUserData = async (email: string, id?: string) => {
-      console.log("Loading user data for:", email);
+      console.log("Establishing Uplink for:", email);
       const u = await db.getUser(email, id);
       if (u) {
         setUser(u);
@@ -55,8 +55,12 @@ const App: React.FC = () => {
             timestamp: Date.now()
           }]);
         }
+        // সাকসেসফুলি ইউজার ডাটা লোড হলে URL ক্লিন করুন
+        if (window.location.search.includes('code=') || window.location.hash.includes('access_token')) {
+          window.history.replaceState({}, document.title, window.location.origin);
+        }
+        setIsAuthLoading(false);
       }
-      setIsAuthLoading(false);
     };
 
     const init = async () => {
@@ -72,22 +76,24 @@ const App: React.FC = () => {
         if (email) {
           await loadUserData(email, session?.user?.id);
         } else {
-          // যদি URL-এ হ্যাশ থাকে (যেমন Google login-এর পর), তবে loading screen দেখাব যতক্ষণ না event ধরা পড়ে
-          if (!window.location.hash.includes('access_token')) {
+          // যদি URL-এ লগইন প্যারামিটার না থাকে তবেই লোডিং বন্ধ হবে
+          const hasParams = window.location.search.includes('code=') || window.location.hash.includes('access_token');
+          if (!hasParams) {
             setIsAuthLoading(false);
           }
         }
       } catch (e) {
+        console.error("Initialization error:", e);
         setIsAuthLoading(false);
       }
     };
 
     const { data: { subscription } } = db.onAuthStateChange(async (event, session) => {
-      console.log("Supabase Auth Event:", event);
+      console.log("Auth State Changed:", event);
       if (event === 'PASSWORD_RECOVERY') {
         setAuthView('update');
         setIsAuthLoading(false);
-      } else if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION' || event === 'USER_UPDATED') && session?.user?.email) {
+      } else if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session?.user?.email) {
         await loadUserData(session.user.email, session.user.id);
       } else if (event === 'SIGNED_OUT') {
         setUser(null);
@@ -97,10 +103,9 @@ const App: React.FC = () => {
 
     init();
     
-    // Safety timer: যদি ৬ সেকেন্ডেও সেশন লোড না হয় তবে লোডিং বন্ধ করে লগইন পেজ দেখাবে
     const safetyTimer = setTimeout(() => {
       setIsAuthLoading(false);
-    }, 6000);
+    }, 12000); // Google Login অনেক সময় দেরি করতে পারে তাই সময় একটু বাড়ানো হয়েছে
 
     return () => {
       subscription.unsubscribe();
@@ -126,7 +131,7 @@ const App: React.FC = () => {
           setAuthStatus({ type: 'error', msg: error.message });
           setIsAuthLoading(false);
         } else {
-          setAuthStatus({ type: 'success', msg: 'Registration successful! Check your email.' });
+          setAuthStatus({ type: 'success', msg: 'Registration successful! Check email.' });
           setIsAuthLoading(false);
         }
       } else if (authView === 'forgot') {
@@ -135,7 +140,7 @@ const App: React.FC = () => {
           setAuthStatus({ type: 'error', msg: error.message });
           setIsAuthLoading(false);
         } else {
-          setAuthStatus({ type: 'success', msg: 'Password reset link sent to your email.' });
+          setAuthStatus({ type: 'success', msg: 'Recovery link sent.' });
           setIsAuthLoading(false);
         }
       } else if (authView === 'update') {
@@ -144,15 +149,12 @@ const App: React.FC = () => {
           setAuthStatus({ type: 'error', msg: error.message });
           setIsAuthLoading(false);
         } else {
-          setAuthStatus({ type: 'success', msg: 'Password updated! Please login with your new password.' });
-          setTimeout(() => {
-            setAuthView('signin');
-            setIsAuthLoading(false);
-          }, 2000);
+          setAuthStatus({ type: 'success', msg: 'Password updated. Redirecting...' });
+          setTimeout(() => setAuthView('signin'), 2000);
         }
       }
     } catch (err) {
-      setAuthStatus({ type: 'error', msg: 'Critical system error.' });
+      setAuthStatus({ type: 'error', msg: 'System Error.' });
       setIsAuthLoading(false);
     }
   };
@@ -178,7 +180,8 @@ const App: React.FC = () => {
         <Cpu size={64} className="text-cyan-500 animate-pulse absolute inset-0"/>
         <div className="absolute inset-0 blur-xl bg-cyan-500/20 animate-pulse rounded-full"></div>
       </div>
-      <div className="text-cyan-500 font-black tracking-[0.4em] text-[10px] uppercase animate-pulse">Establishing Secure Uplink...</div>
+      <div className="text-cyan-500 font-black tracking-[0.4em] text-[10px] uppercase animate-pulse">Synchronizing Session...</div>
+      <p className="mt-4 text-white/10 text-[9px] uppercase tracking-widest">Validating Neural Link</p>
     </div>
   );
 

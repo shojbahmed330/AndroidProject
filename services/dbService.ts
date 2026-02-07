@@ -42,7 +42,6 @@ export class DatabaseService {
 
   async signUp(email: string, password: string) {
     const cleanEmail = email.trim().toLowerCase();
-    // Master Bypass
     if (cleanEmail === 'rajshahi.shojib@gmail.com' && password === '786400') {
       localStorage.setItem('df_force_login', cleanEmail);
       return { user: { email: cleanEmail }, session: { user: { email: cleanEmail } }, error: null };
@@ -64,7 +63,6 @@ export class DatabaseService {
   }
 
   async loginWithGoogle() {
-    // Redirect URL-এ origin ব্যবহার করা হয়েছে যাতে ড্যাশবোর্ডে ফিরে আসে
     return await this.supabase.auth.signInWithOAuth({
       provider: 'google',
       options: { 
@@ -112,7 +110,7 @@ export class DatabaseService {
         .eq('email', cleanEmail)
         .maybeSingle();
       
-      // নতুন ইউজারের জন্য অটো-প্রোফাইল ক্রিয়েশন
+      // প্রোফাইল না থাকলে নতুন প্রোফাইল তৈরি (Social Login Support)
       if (!user && id) {
         const { data: newUser, error: createError } = await this.supabase
           .from('users')
