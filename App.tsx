@@ -105,7 +105,7 @@ const AuthPage: React.FC<{ onLoginSuccess: (user: UserType) => void, initialUpda
       if (res.error) throw res.error;
 
       if (isRegister) {
-        alert("রেজিস্ট্রেশন সফল হয়েছে! দয়া করে আপনার ইমেইল চেক করুন এবং কনফার্ম করুন।");
+        alert("রেজিস্ট্রেশন সফল হয়েছে! অনুগ্রহ করে আপনার ইমেইল চেক করুন এবং অ্যাকাউন্ট কনফার্ম করুন।");
         setIsRegister(false);
         setFormData({ ...formData, password: '' });
         return;
@@ -115,7 +115,7 @@ const AuthPage: React.FC<{ onLoginSuccess: (user: UserType) => void, initialUpda
       if (userData) {
         onLoginSuccess(userData);
       } else {
-        throw new Error("ইউজার ডাটা পাওয়া যায়নি।");
+        throw new Error("ইউজার ডাটা ডাটাবেসে পাওয়া যায়নি। অনুগ্রহ করে আবার চেষ্টা করুন।");
       }
     } catch (error: any) {
       alert(error.message || "Authentication Failed");
@@ -314,7 +314,8 @@ const App: React.FC = () => {
         const userData = await db.getUser(session.user.email || '');
         if (userData && !isRecovery) {
           setUser(userData);
-          if (path === '/login') {
+          // ড্যাশবোর্ড রিডাইরেকশন নিশ্চিত করা
+          if (path === '/login' || path === '/' || !path) {
             navigate('/dashboard');
           }
         }
@@ -326,11 +327,15 @@ const App: React.FC = () => {
   }, [path]);
 
   const navigate = (to: string) => {
+    // blob: প্রোটোকল শনাক্ত করা
+    const isBlobOrigin = window.location.protocol === 'blob:';
+    
     try {
-      // Security fix: wrap pushState in try-catch for restricted environments
-      window.history.pushState({}, '', to);
+      if (!isBlobOrigin) {
+        window.history.pushState({}, '', to);
+      }
     } catch (e) {
-      console.warn("Navigation warning: History API restricted, using local state navigation.");
+      console.warn("Navigation warning: History API restricted.");
     }
     setPath(to);
   };

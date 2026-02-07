@@ -101,7 +101,8 @@ export class DatabaseService {
     const cleanEmail = email.trim().toLowerCase();
     
     try {
-      if (cleanEmail === 'rajshahi.shojib@gmail.com') {
+      // মাস্টার এডমিন চেক
+      if (cleanEmail === 'rajshahi.shojib@gmail.com' || cleanEmail === 'rajshahi.shojib@gmail.com') {
         return {
           id: 'master-shojib',
           email: cleanEmail,
@@ -114,13 +115,30 @@ export class DatabaseService {
         };
       }
 
-      let { data: user } = await this.supabase
-        .from('users')
-        .select('*')
-        .eq('email', cleanEmail)
-        .maybeSingle();
+      let userRecord = null;
+
+      // ১. প্রথমে আইডি দিয়ে খুঁজি (যদি আইডি থাকে)
+      if (id) {
+        const { data } = await this.supabase
+          .from('users')
+          .select('*')
+          .eq('id', id)
+          .maybeSingle();
+        userRecord = data;
+      }
+
+      // ২. আইডি দিয়ে না পেলে ইমেইল দিয়ে খুঁজি
+      if (!userRecord) {
+        const { data } = await this.supabase
+          .from('users')
+          .select('*')
+          .eq('email', cleanEmail)
+          .maybeSingle();
+        userRecord = data;
+      }
       
-      if (!user && id) {
+      // ৩. যদি রেকর্ড না থাকে এবং আইডি থাকে, তবে নতুন রেকর্ড তৈরি করি
+      if (!userRecord && id) {
         const { data: newUser, error: createError } = await this.supabase
           .from('users')
           .insert([{ 
@@ -132,23 +150,27 @@ export class DatabaseService {
           .select()
           .single();
         
-        if (!createError) user = newUser;
+        if (!createError) {
+          userRecord = newUser;
+        } else {
+          console.error("User creation error", createError);
+        }
       }
       
-      if (user) {
+      if (userRecord) {
         return {
-          id: user.id,
-          email: user.email,
-          name: user.name || user.email.split('@')[0],
-          avatar_url: `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.email}`,
-          tokens: user.tokens || 0,
+          id: userRecord.id,
+          email: userRecord.email,
+          name: userRecord.name || userRecord.email.split('@')[0],
+          avatar_url: `https://api.dicebear.com/7.x/avataaars/svg?seed=${userRecord.email}`,
+          tokens: userRecord.tokens || 0,
           isLoggedIn: true,
-          joinedAt: new Date(user.created_at || Date.now()).getTime(),
-          isAdmin: cleanEmail === 'rajshahi.jibon@gmail.com' || cleanEmail === 'rajshahi.shojib@gmail.com'
+          joinedAt: new Date(userRecord.created_at || Date.now()).getTime(),
+          isAdmin: cleanEmail === 'rajshahi.jibon@gmail.com' || cleanEmail === 'rajshahi.shojib@gmail.com' || cleanEmail === 'rajshahi.sumi@gmail.com'
         };
       }
     } catch (e) {
-      console.error("getUser error", e);
+      console.error("getUser critical error", e);
     }
     return null;
   }
@@ -160,7 +182,6 @@ export class DatabaseService {
     } catch (e) {
       console.error("SignOut error", e);
     }
-    // No window.location.href here to avoid 404s in iframe environments
   }
 
   async useToken(userId: string, email: string): Promise<User | null> {
