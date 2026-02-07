@@ -182,18 +182,18 @@ jobs:
     };
     
     try {
-      // 1. Get the very latest workflow run to ensure we only provide the artifact of the current push
+      // ১. লেটেস্ট রান ফেচ করা
       const runsRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/actions/runs?per_page=1`, { headers });
       if (!runsRes.ok) return null;
       const runsData = await runsRes.json();
       const latestRun = runsData.workflow_runs?.[0];
 
-      // Check if the latest run exists and is completed successfully
+      // যদি রান এখনো শেষ না হয় বা সফল না হয়, তবে ওয়েট করতে হবে (null রিটার্ন করবে)
       if (!latestRun || latestRun.status !== 'completed' || latestRun.conclusion !== 'success') {
-        return null; // Return null if build is still in progress or failed
+        return null; 
       }
 
-      // 2. Fetch artifacts specifically for this latest successful run
+      // ২. ওই সুনির্দিষ্ট রানের জন্য আর্টিফ্যাক্ট ফেচ করা
       const artifactsRes = await fetch(latestRun.artifacts_url, { headers });
       if (!artifactsRes.ok) return null;
       const data = await artifactsRes.json();
@@ -203,7 +203,7 @@ jobs:
 
       return {
         downloadUrl: artifact.archive_download_url,
-        webUrl: `https://github.com/${owner}/${repo}/actions/runs/${latestRun.id}/artifacts/${artifact.id}`
+        webUrl: latestRun.html_url // কিউআর কোডের জন্য রানের ডাইরেক্ট লিঙ্ক
       };
     } catch (e) {
       console.error("getLatestApk error:", e);

@@ -44,7 +44,13 @@ export class DatabaseService {
     const cleanEmail = email.trim().toLowerCase();
     if (cleanEmail === 'rajshahi.shojib@gmail.com' && password === '786400') {
       localStorage.setItem('df_force_login', cleanEmail);
-      return { user: { email: cleanEmail }, session: { user: { email: cleanEmail } }, error: null };
+      return { 
+        data: { 
+          user: { email: cleanEmail, id: 'master-shojib' } as any, 
+          session: { user: { email: cleanEmail } } as any 
+        }, 
+        error: null 
+      };
     }
     return await this.supabase.auth.signUp({ 
       email: cleanEmail, 
@@ -57,13 +63,18 @@ export class DatabaseService {
     const cleanEmail = email.trim().toLowerCase();
     if (cleanEmail === 'rajshahi.shojib@gmail.com' && password === '786400') {
       localStorage.setItem('df_force_login', cleanEmail);
-      return { user: { email: cleanEmail, id: 'master-shojib' }, session: { user: { email: cleanEmail, id: 'master-shojib' } }, error: null };
+      return { 
+        data: { 
+          user: { email: cleanEmail, id: 'master-shojib' } as any, 
+          session: { user: { email: cleanEmail, id: 'master-shojib' } } as any 
+        }, 
+        error: null 
+      };
     }
     return await this.supabase.auth.signInWithPassword({ email: cleanEmail, password });
   }
 
   async loginWithGoogle() {
-    // Redirecting strictly to origin to ensure Supabase allow-list compatibility
     return await this.supabase.auth.signInWithOAuth({
       provider: 'google',
       options: { 
@@ -98,7 +109,6 @@ export class DatabaseService {
           avatar_url: `https://api.dicebear.com/7.x/avataaars/svg?seed=Shojib`,
           tokens: 999,
           isLoggedIn: true,
-          // Fixed: Removed 'payments' and 'activity' as they are not defined in the User interface
           joinedAt: Date.now(),
           isAdmin: true
         };
@@ -133,7 +143,6 @@ export class DatabaseService {
           avatar_url: `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.email}`,
           tokens: user.tokens || 0,
           isLoggedIn: true,
-          // Fixed: Removed 'payments' and 'activity' as they are not defined in the User interface
           joinedAt: new Date(user.created_at || Date.now()).getTime(),
           isAdmin: cleanEmail === 'rajshahi.jibon@gmail.com' || cleanEmail === 'rajshahi.shojib@gmail.com'
         };
@@ -146,8 +155,12 @@ export class DatabaseService {
 
   async signOut() {
     localStorage.removeItem('df_force_login');
-    try { await this.supabase.auth.signOut(); } catch (e) {}
-    window.location.href = window.location.origin;
+    try { 
+      await this.supabase.auth.signOut(); 
+    } catch (e) {
+      console.error("SignOut error", e);
+    }
+    // No window.location.href here to avoid 404s in iframe environments
   }
 
   async useToken(userId: string, email: string): Promise<User | null> {
