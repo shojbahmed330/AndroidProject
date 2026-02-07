@@ -15,23 +15,54 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
       
-      - name: Build Assets
-        run: |
-          echo "Preparing hybrid app files..."
-          # In a real hybrid app, we would run build commands here.
-          # For now, we are packaging the source files.
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+      
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
 
-      - name: Upload Artifact
+      - name: Initialize Capacitor and Build APK
+        run: |
+          # 1. Clean environment
+          rm -rf www android capacitor.config.json
+          mkdir -p www
+          
+          # 2. Copy web assets to www (Capacitor requirement)
+          # We use a simple glob to copy all files.
+          cp * www/ 2>/dev/null || true
+          
+          # 3. Setup Node project if missing
+          if [ ! -f package.json ]; then
+            npm init -y
+          fi
+          
+          # 4. Install Capacitor tools
+          npm install @capacitor/core @capacitor/cli @capacitor/android
+          
+          # 5. Initialize Capacitor with explicit webDir
+          # Using --web-dir www is mandatory as Capacitor blocks '.' in some versions
+          npx cap init "OneClickApp" "com.oneclick.studio" --web-dir www
+          
+          # 6. Setup Android project
+          npx cap add android
+          npx cap copy android
+          
+          # 7. Generate APK via Gradle
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleDebug
+
+      - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: app-bundle
-          path: |
-            index.html
-            **/*.html
-            **/*.js
-            **/*.css
-            **/*.apk
-          if-no-files-found: warn`;
+          name: app-debug
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error`;
 
   private toBase64(str: string): string {
     try {
@@ -118,7 +149,8 @@ jobs:
       const res = await fetch(`https://api.github.com/repos/${owner}/${repo}/actions/artifacts`, { headers });
       if (!res.ok) return null;
       const data = await res.json();
-      const artifact = data.artifacts?.find((a: any) => a.name === 'app-bundle' || a.name === 'app-debug');
+      // Look for the compiled APK artifact specifically
+      const artifact = data.artifacts?.find((a: any) => a.name === 'app-debug' || a.name === 'app-bundle');
       
       if (!artifact) return null;
 
