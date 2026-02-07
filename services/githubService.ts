@@ -15,44 +15,82 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
       
-      - name: Set up JDK 17
+      - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
-          java-version: '17'
+          java-version: '21'
           distribution: 'temurin'
       
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: 22
+          check-latest: true
 
       - name: Initialize Capacitor and Build APK
         run: |
-          # 1. Clean environment
+          # Verify Node version for debug
+          node -v
+          
+          # 1. Clean and Setup directories
           rm -rf www android capacitor.config.json
           mkdir -p www
           
-          # 2. Copy web assets to www (Capacitor requirement)
-          # We use a simple glob to copy all files.
-          cp * www/ 2>/dev/null || true
+          # 2. Sync web assets
+          cp index.html main.js style.css www/ 2>/dev/null || true
+          if [ ! -f www/index.html ]; then
+            find . -maxdepth 1 -type f -not -name "package*" -exec cp {} www/ \;
+          fi
           
-          # 3. Setup Node project if missing
+          # 3. Setup Project
           if [ ! -f package.json ]; then
             npm init -y
           fi
           
-          # 4. Install Capacitor tools
-          npm install @capacitor/core @capacitor/cli @capacitor/android
+          # 4. Install Dependencies
+          npm install @capacitor/core@latest @capacitor/cli@latest @capacitor/android@latest
           
-          # 5. Initialize Capacitor with explicit webDir
-          # Using --web-dir www is mandatory as Capacitor blocks '.' in some versions
+          # 5. Capacitor Init
           npx cap init "OneClickApp" "com.oneclick.studio" --web-dir www
           
-          # 6. Setup Android project
+          # 6. Add Android Platform
           npx cap add android
+          
+          # 7. CRITICAL FIXES: Java 21 & Kotlin Duplication
+          # Enable Jetifier for backward compatibility
+          echo "android.enableJetifier=true" >> android/gradle.properties
+          echo "android.useAndroidX=true" >> android/gradle.properties
+          
+          # Force Java 21 in build.gradle
+          sed -i 's/JavaVersion.VERSION_17/JavaVersion.VERSION_21/g' android/app/build.gradle
+          sed -i 's/JavaVersion.VERSION_11/JavaVersion.VERSION_21/g' android/app/build.gradle
+          sed -i 's/JavaVersion.VERSION_1_8/JavaVersion.VERSION_21/g' android/app/build.gradle
+          
+          # Fix Kotlin Duplicate Classes and Resolution Strategy
+          echo "" >> android/app/build.gradle
+          echo "android {" >> android/app/build.gradle
+          echo "    packagingOptions {" >> android/app/build.gradle
+          echo "        resources {" >> android/app/build.gradle
+          echo "            pickFirst 'META-INF/kotlin-stdlib.kotlin_module'" >> android/app/build.gradle
+          echo "            pickFirst 'META-INF/kotlin-stdlib-jdk8.kotlin_module'" >> android/app/build.gradle
+          echo "            pickFirst 'META-INF/kotlin-stdlib-jdk7.kotlin_module'" >> android/app/build.gradle
+          echo "            pickFirst 'META-INF/AL2.0'" >> android/app/build.gradle
+          echo "            pickFirst 'META-INF/LGPL2.1'" >> android/app/build.gradle
+          echo "        }" >> android/app/build.gradle
+          echo "    }" >> android/app/build.gradle
+          echo "}" >> android/app/build.gradle
+          echo "" >> android/app/build.gradle
+          echo "configurations.all {" >> android/app/build.gradle
+          echo "    resolutionStrategy {" >> android/app/build.gradle
+          echo "        force 'org.jetbrains.kotlin:kotlin-stdlib:1.9.10'" >> android/app/build.gradle
+          echo "        force 'org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.9.10'" >> android/app/build.gradle
+          echo "        force 'org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.9.10'" >> android/app/build.gradle
+          echo "    }" >> android/app/build.gradle
+          echo "}" >> android/app/build.gradle
+
           npx cap copy android
           
-          # 7. Generate APK via Gradle
+          # 8. Build APK
           cd android
           chmod +x gradlew
           ./gradlew assembleDebug
@@ -94,12 +132,6 @@ jobs:
     const repoCheck = await fetch(baseUrl, { headers });
     if (!repoCheck.ok) {
       const err = await repoCheck.json().catch(() => ({}));
-      if (repoCheck.status === 401) {
-        throw new Error(`গিটহাব অথরাইজেশন ফেল করেছে (401): ${err.message || "টোকেনটি সঠিক নয়।"}`);
-      }
-      if (repoCheck.status === 403 || repoCheck.status === 404) {
-        throw new Error(`গিটহাব এক্সেস এরর (${repoCheck.status}): ${err.message || "রিপোজিটরি খুঁজে পাওয়া যায়নি বা পারমিশন নেই।"}`);
-      }
       throw new Error(`গিটহাব কানেকশন এরর: ${err.message || "অজানা সমস্যা"}`);
     }
 
@@ -132,7 +164,7 @@ jobs:
 
       if (!putRes.ok) {
         const err = await putRes.json().catch(() => ({}));
-        throw new Error(`ফাইল ${path} পুশ করতে সমস্যা হয়েছে: ${err.message || "পারমিশন নেই"}. আপনার টোকেনে 'repo' এবং 'workflow' পারমিশন আছে কি?`);
+        throw new Error(`ফাইল ${path} পুশ করতে সমস্যা হয়েছে: ${err.message || "পারমিশন নেই"}.`);
       }
     }
   }
@@ -144,21 +176,37 @@ jobs:
 
     if (!token || !owner || !repo) return null;
     
-    const headers = { 'Authorization': `token ${token}` };
+    const headers = { 
+      'Authorization': `token ${token}`,
+      'Accept': 'application/vnd.github.v3+json'
+    };
+    
     try {
-      const res = await fetch(`https://api.github.com/repos/${owner}/${repo}/actions/artifacts`, { headers });
-      if (!res.ok) return null;
-      const data = await res.json();
-      // Look for the compiled APK artifact specifically
+      // 1. Get the very latest workflow run to ensure we only provide the artifact of the current push
+      const runsRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/actions/runs?per_page=1`, { headers });
+      if (!runsRes.ok) return null;
+      const runsData = await runsRes.json();
+      const latestRun = runsData.workflow_runs?.[0];
+
+      // Check if the latest run exists and is completed successfully
+      if (!latestRun || latestRun.status !== 'completed' || latestRun.conclusion !== 'success') {
+        return null; // Return null if build is still in progress or failed
+      }
+
+      // 2. Fetch artifacts specifically for this latest successful run
+      const artifactsRes = await fetch(latestRun.artifacts_url, { headers });
+      if (!artifactsRes.ok) return null;
+      const data = await artifactsRes.json();
       const artifact = data.artifacts?.find((a: any) => a.name === 'app-debug' || a.name === 'app-bundle');
       
       if (!artifact) return null;
 
       return {
         downloadUrl: artifact.archive_download_url,
-        webUrl: `https://github.com/${owner}/${repo}/actions/runs/${artifact.workflow_run.id}/artifacts/${artifact.id}`
+        webUrl: `https://github.com/${owner}/${repo}/actions/runs/${latestRun.id}/artifacts/${artifact.id}`
       };
     } catch (e) {
+      console.error("getLatestApk error:", e);
       return null;
     }
   }
@@ -166,7 +214,7 @@ jobs:
   async downloadArtifact(config: GithubConfig, url: string) {
     const headers = { 'Authorization': `token ${config.token}` };
     const res = await fetch(url, { headers });
-    if (!res.ok) throw new Error("ডাউনলোড করতে সমস্যা হয়েছে। টোকেন পারমিশন চেক করুন।");
+    if (!res.ok) throw new Error("ডাউনলোড এরর।");
     return await res.blob();
   }
 }
