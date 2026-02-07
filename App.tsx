@@ -5,7 +5,7 @@ import {
   Download, Globe, Activity, Terminal, ShieldAlert, Package, QrCode, 
   AlertCircle, Key, Mail, ArrowLeft, FileCode, ShoppingCart, User as UserIcon,
   ChevronRight, Github, Save, Trash2, Square, Circle, RefreshCw, Fingerprint,
-  User, Lock, Eye, EyeOff
+  User, Lock, Eye, EyeOff, MessageSquare, Monitor
 } from 'lucide-react';
 import { AppMode, ChatMessage, User as UserType, GithubConfig } from './types';
 import { GeminiService } from './services/geminiService';
@@ -61,29 +61,29 @@ const LoginPage: React.FC<{ onLoginSuccess: (user: UserType) => void }> = ({ onL
   };
 
   return (
-    <div className="h-screen w-full flex flex-col items-center justify-start pt-16 md:justify-center md:pt-0 bg-[#0f172a] text-white relative overflow-hidden font-sans p-4">
+    <div className="h-screen w-full flex flex-col items-center justify-start pt-12 md:justify-center md:pt-0 bg-[#0f172a] text-white relative overflow-hidden font-sans p-4">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-blue-900/20 via-transparent to-transparent opacity-50"></div>
       
       {step === 'scan' ? (
         <div className="flex flex-col items-center text-center animate-in fade-in zoom-in duration-700">
           {/* Welcome Message */}
-          <div className="mb-10 md:mb-12 space-y-3 animate-in fade-in slide-in-from-top-8 duration-1000">
-            <h1 className="text-4xl md:text-6xl font-black tracking-tighter bg-clip-text text-transparent bg-gradient-to-br from-white via-cyan-400 to-blue-600 drop-shadow-[0_0_20px_rgba(6,182,212,0.3)] px-4">
+          <div className="mb-8 md:mb-12 space-y-2 animate-in fade-in slide-in-from-top-8 duration-1000">
+            <h1 className="text-3xl md:text-6xl font-black tracking-tighter bg-clip-text text-transparent bg-gradient-to-br from-white via-cyan-400 to-blue-600 drop-shadow-[0_0_20px_rgba(6,182,212,0.3)] px-4">
               Welcome to OneClick Studio
             </h1>
-            <p className="text-[10px] md:text-xs font-black uppercase tracking-[0.4em] text-slate-500 opacity-60">
+            <p className="text-[9px] md:text-xs font-black uppercase tracking-[0.4em] text-slate-500 opacity-60">
               Uplink initiated • AI Developer Interface
             </p>
           </div>
 
           <div 
             onClick={!isScanning ? handleStartAuth : undefined}
-            className={`relative w-36 h-36 md:w-48 md:h-48 flex items-center justify-center cursor-pointer transition-transform active:scale-95 group mb-8 md:mb-12`}
+            className={`relative w-32 h-32 md:w-48 md:h-48 flex items-center justify-center cursor-pointer transition-transform active:scale-95 group mb-6 md:mb-12`}
           >
             <div className={`absolute inset-0 bg-blue-500/10 rounded-full blur-3xl group-hover:bg-blue-500/20 transition-all ${!isScanning ? 'animate-pulse' : ''}`}></div>
             
             <Fingerprint 
-              size={isScanning ? 100 : 90} 
+              size={isScanning ? 80 : 70} 
               className={`
                 ${isScanning ? 'text-cyan-400 scale-110' : 'text-blue-600'} 
                 transition-all duration-500 relative z-10 
@@ -97,7 +97,7 @@ const LoginPage: React.FC<{ onLoginSuccess: (user: UserType) => void }> = ({ onL
             )}
           </div>
 
-          <h2 className={`text-sm md:text-xl font-bold tracking-widest uppercase transition-colors duration-500 ${isScanning ? 'text-cyan-400' : 'text-slate-400'}`}>
+          <h2 className={`text-xs md:text-xl font-bold tracking-widest uppercase transition-colors duration-500 ${isScanning ? 'text-cyan-400' : 'text-slate-400'}`}>
             {isScanning ? 'Identity Scanning...' : 'Touch sensor to access system'}
           </h2>
 
@@ -112,11 +112,11 @@ const LoginPage: React.FC<{ onLoginSuccess: (user: UserType) => void }> = ({ onL
           `}</style>
         </div>
       ) : (
-        <div className="relative w-full max-w-[400px] h-[500px] [perspective:1200px] animate-in fade-in zoom-in-95 duration-500 mt-4 md:mt-0">
+        <div className="relative w-full max-w-[400px] h-[480px] md:h-[500px] [perspective:1200px] animate-in fade-in zoom-in-95 duration-500 mt-2 md:mt-0">
           <div className={`relative w-full h-full transition-transform duration-1000 [transform-style:preserve-3d] ${isRegister ? '[transform:rotateY(-90deg)]' : ''}`}>
             {/* Login Face */}
             <div className="absolute inset-0 [backface-visibility:hidden] bg-white/5 backdrop-blur-xl border border-white/10 rounded-[2rem] md:rounded-[2.5rem] p-6 md:p-10 flex flex-col justify-center shadow-2xl [transform:translateZ(150px)] md:[transform:translateZ(200px)]">
-              <h2 className="text-2xl md:text-3xl font-black mb-8 tracking-tight">System <span className="text-cyan-400">Login</span></h2>
+              <h2 className="text-2xl md:text-3xl font-black mb-6 md:mb-8 tracking-tight">System <span className="text-cyan-400">Login</span></h2>
               <form onSubmit={handleAuth} className="space-y-4">
                 <div className="space-y-2">
                   <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 ml-4">Access Email</label>
@@ -223,6 +223,7 @@ const App: React.FC = () => {
   const [user, setUser] = useState<UserType | null>(null);
   const [path, setPath] = useState(window.location.pathname);
   const [mode, setMode] = useState<AppMode>(AppMode.PREVIEW);
+  const [mobileSubMode, setMobileSubMode] = useState<'chat' | 'preview'>('chat');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
@@ -337,6 +338,7 @@ const App: React.FC = () => {
     }
   };
 
+  // Fixed handleBuildAPK by replacing 'config' with 'github' state variable
   const handleBuildAPK = async () => {
     if (!github.token || !github.owner || !github.repo) {
       alert("দয়া করে আগে লোগোতে ৩ বার ক্লিক করে গিটহাব সেটিংস ঠিক করুন।");
@@ -347,10 +349,12 @@ const App: React.FC = () => {
     setBuildStatus('pushing');
     
     try {
+      // Corrected from 'config' to 'github'
       await githubService.current.pushToGithub(github, projectFiles);
       setBuildStatus('building');
       
       const poll = async () => {
+        // Corrected from 'config' to 'github'
         const result = await githubService.current.getLatestApk(github);
         if (result && typeof result === 'object' && result.downloadUrl) {
           setApkUrl(result);
@@ -479,10 +483,28 @@ const App: React.FC = () => {
         </button>
       </header>
 
+      {/* Mobile Sub-Navigation for Chat/Preview Separation */}
+      {(mode === AppMode.PREVIEW || mode === AppMode.EDIT) && (
+        <div className="lg:hidden flex border-b border-white/5 bg-slate-900/40 p-2 gap-2 z-40">
+           <button 
+             onClick={() => setMobileSubMode('chat')}
+             className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${mobileSubMode === 'chat' ? 'bg-cyan-500 text-black shadow-[0_0_15px_rgba(6,182,212,0.4)]' : 'text-slate-500'}`}
+           >
+             <MessageSquare size={14}/> Terminal
+           </button>
+           <button 
+             onClick={() => setMobileSubMode('preview')}
+             className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${mobileSubMode === 'preview' ? 'bg-cyan-500 text-black shadow-[0_0_15px_rgba(6,182,212,0.4)]' : 'text-slate-500'}`}
+           >
+             <Monitor size={14}/> Live Preview
+           </button>
+        </div>
+      )}
+
       <main className="flex-1 flex flex-col lg:flex-row overflow-hidden">
         {mode === AppMode.PREVIEW || mode === AppMode.EDIT ? (
           <>
-            <section className="w-full lg:w-[450px] border-b lg:border-b-0 lg:border-r border-white/5 flex flex-col bg-[#01040f] relative h-[60%] lg:h-full order-2 lg:order-1">
+            <section className={`w-full lg:w-[450px] border-b lg:border-b-0 lg:border-r border-white/5 flex-col bg-[#01040f] relative h-full lg:h-full order-2 lg:order-1 ${mobileSubMode === 'chat' ? 'flex' : 'hidden lg:flex'}`}>
               <div className="flex-1 p-4 md:p-8 overflow-y-auto code-scroll space-y-6 pb-40">
                 {/* Build Status Alert */}
                 {buildStatus !== 'idle' && (
@@ -594,7 +616,7 @@ const App: React.FC = () => {
               </div>
             </section>
 
-            <section className="flex-1 flex flex-col bg-[#020617] h-[40%] lg:h-full order-1 lg:order-2">
+            <section className={`flex-1 flex-col bg-[#020617] h-full lg:h-full order-1 lg:order-2 ${mobileSubMode === 'preview' ? 'flex' : 'hidden lg:flex'}`}>
               {mode === AppMode.EDIT ? (
                 <div className="flex-1 flex flex-col lg:flex-row overflow-hidden animate-in fade-in duration-500">
                   <div className="w-full lg:w-72 border-b lg:border-b-0 lg:border-r border-white/5 bg-black/30 p-4 lg:p-8 space-y-2 overflow-y-auto overflow-x-hidden lg:overflow-y-auto no-scrollbar">
@@ -623,7 +645,7 @@ const App: React.FC = () => {
               ) : (
                 <div className="flex-1 flex items-center justify-center p-4 lg:p-10 relative overflow-hidden">
                   <div className="absolute inset-0 bg-grid opacity-10 lg:opacity-20 pointer-events-none"></div>
-                  <div className="bg-slate-900 rounded-[2.5rem] lg:rounded-[4.5rem] h-full max-h-[600px] lg:h-[780px] aspect-[9/19] lg:w-[380px] border-[8px] lg:border-[14px] border-slate-800 shadow-[0_0_100px_rgba(0,0,0,0.8)] relative overflow-hidden group">
+                  <div className="bg-slate-900 rounded-[2.5rem] lg:rounded-[4.5rem] h-full w-full max-w-[380px] lg:h-[780px] border-[8px] lg:border-[14px] border-slate-800 shadow-[0_0_100px_rgba(0,0,0,0.8)] relative overflow-hidden group">
                     <div className="absolute top-0 left-1/2 -translate-x-1/2 w-24 lg:w-44 h-4 lg:h-8 bg-slate-800 rounded-b-2xl lg:rounded-b-3xl z-20 flex items-center justify-center"><div className="w-8 lg:w-12 h-1 bg-white/5 rounded-full"></div></div>
                     <iframe 
                       key={JSON.stringify(projectFiles)}
