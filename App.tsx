@@ -101,7 +101,16 @@ const AuthPage: React.FC<{ onLoginSuccess: (user: UserType) => void, initialUpda
       const res = isRegister 
         ? await db.signUp(formData.email, formData.password)
         : await db.signIn(formData.email, formData.password);
+      
       if (res.error) throw res.error;
+
+      if (isRegister) {
+        alert("রেজিস্ট্রেশন সফল হয়েছে! দয়া করে আপনার ইমেইল চেক করুন এবং কনফার্ম করুন।");
+        setIsRegister(false);
+        setFormData({ ...formData, password: '' });
+        return;
+      }
+
       const userData = await db.getUser(formData.email, res.data.user?.id);
       if (userData) onLoginSuccess(userData);
     } catch (error: any) {
@@ -146,8 +155,12 @@ const AuthPage: React.FC<{ onLoginSuccess: (user: UserType) => void, initialUpda
     try {
       const { error } = await db.updatePassword(formData.password);
       if (error) throw error;
-      alert("পাসওয়ার্ড সফলভাবে পরিবর্তন হয়েছে। এখন লগইন করুন।");
+      
+      // পাসওয়ার্ড আপডেটের পর সেশন ক্লিয়ার করে ফ্রেশ লগইন করানো ভালো
+      await db.signOut();
+      alert("পাসওয়ার্ড সফলভাবে পরিবর্তন হয়েছে। এখন আপনার নতুন পাসওয়ার্ড দিয়ে লগইন করুন।");
       setIsUpdatingPassword(false);
+      window.location.hash = ''; // ক্লিনিং রিকভারি হ্যাশ
     } catch (error: any) {
       alert(error.message || "পাসওয়ার্ড আপডেট করতে সমস্যা হয়েছে।");
     } finally {
@@ -186,7 +199,7 @@ const AuthPage: React.FC<{ onLoginSuccess: (user: UserType) => void, initialUpda
                   <button disabled={isLoading} className="w-full py-4 bg-cyan-600 rounded-2xl font-black uppercase tracking-widest text-sm shadow-xl hover:bg-cyan-500 transition-all active:scale-95 flex items-center justify-center gap-2">
                     {isLoading ? <Loader2 className="animate-spin" /> : 'Save New Token'}
                   </button>
-                  <button type="button" onClick={() => setIsUpdatingPassword(false)} className="w-full text-xs text-slate-400 font-bold hover:text-white">Cancel Recovery</button>
+                  <button type="button" onClick={() => { setIsUpdatingPassword(false); window.location.hash = ''; }} className="w-full text-xs text-slate-400 font-bold hover:text-white">Cancel Recovery</button>
                 </form>
               </div>
             ) : isResetting ? (
@@ -298,10 +311,13 @@ const App: React.FC = () => {
     const checkAuth = async () => {
       const session = await db.getCurrentSession();
       if (session?.user) {
+        // রিকভারি মোডে থাকলে ড্যাশবোর্ডে পাঠাবো না
+        const isRecovery = window.location.hash.includes('type=recovery') || window.location.pathname === '/update-password';
+        
         const userData = await db.getUser(session.user.email || '');
-        if (userData) {
+        if (userData && !isRecovery) {
           setUser(userData);
-          if (window.location.pathname === '/login' || window.location.pathname === '/update-password') {
+          if (window.location.pathname === '/login') {
             navigate('/dashboard');
           }
         }
@@ -310,7 +326,7 @@ const App: React.FC = () => {
       }
     };
     checkAuth();
-  }, []);
+  }, [path]);
 
   const navigate = (to: string) => {
     window.history.pushState({}, '', to);
@@ -457,8 +473,9 @@ const App: React.FC = () => {
 
   // Auth/Routing Protection
   if (!user) {
-    if (path === '/login' || path === '/update-password' || window.location.hash.includes('type=recovery')) {
-       return <AuthPage onLoginSuccess={handleLoginSuccess} initialUpdateMode={path === '/update-password' || window.location.hash.includes('type=recovery')} />;
+    const isRecovery = path === '/update-password' || window.location.hash.includes('type=recovery');
+    if (path === '/login' || isRecovery) {
+       return <AuthPage onLoginSuccess={handleLoginSuccess} initialUpdateMode={isRecovery} />;
     }
     return <ScanPage onFinish={() => navigate('/login')} />;
   }
