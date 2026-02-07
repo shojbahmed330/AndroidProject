@@ -15,7 +15,7 @@ export class DatabaseService {
         autoRefreshToken: true,
         persistSession: true,
         detectSessionInUrl: true,
-        flowType: 'pkce' // আধুনিক ও নিরাপদ ফ্লো
+        flowType: 'pkce'
       }
     });
   }
@@ -42,6 +42,7 @@ export class DatabaseService {
 
   async signUp(email: string, password: string) {
     const cleanEmail = email.trim().toLowerCase();
+    // Master Bypass
     if (cleanEmail === 'rajshahi.shojib@gmail.com' && password === '786400') {
       localStorage.setItem('df_force_login', cleanEmail);
       return { user: { email: cleanEmail }, session: { user: { email: cleanEmail } }, error: null };
@@ -57,26 +58,39 @@ export class DatabaseService {
     const cleanEmail = email.trim().toLowerCase();
     if (cleanEmail === 'rajshahi.shojib@gmail.com' && password === '786400') {
       localStorage.setItem('df_force_login', cleanEmail);
-      return { user: { email: cleanEmail }, session: { user: { email: cleanEmail } }, error: null };
+      return { user: { email: cleanEmail, id: 'master-shojib' }, session: { user: { email: cleanEmail, id: 'master-shojib' } }, error: null };
     }
     return await this.supabase.auth.signInWithPassword({ email: cleanEmail, password });
   }
 
   async loginWithGoogle() {
+    // Redirect URL-এ origin ব্যবহার করা হয়েছে যাতে ড্যাশবোর্ডে ফিরে আসে
     return await this.supabase.auth.signInWithOAuth({
       provider: 'google',
       options: { 
         redirectTo: window.location.origin,
-        queryParams: { access_type: 'offline', prompt: 'consent' }
+        queryParams: { 
+          access_type: 'offline', 
+          prompt: 'consent' 
+        }
       }
     });
+  }
+
+  async resetPassword(email: string) {
+    return await this.supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), {
+      redirectTo: `${window.location.origin}/update-password`,
+    });
+  }
+
+  async updatePassword(newPassword: string) {
+    return await this.supabase.auth.updateUser({ password: newPassword });
   }
 
   async getUser(email: string, id?: string): Promise<User | null> {
     const cleanEmail = email.trim().toLowerCase();
     
     try {
-      // ১. মাস্টার বাইপাস চেক
       if (cleanEmail === 'rajshahi.shojib@gmail.com') {
         return {
           id: 'master-shojib',
@@ -92,16 +106,14 @@ export class DatabaseService {
         };
       }
 
-      // ২. সুপাবেস টেবিল থেকে ইউজার খোঁজা
-      let { data: user, error: fetchError } = await this.supabase
+      let { data: user } = await this.supabase
         .from('users')
         .select('*')
         .eq('email', cleanEmail)
         .maybeSingle();
       
-      // ৩. যদি ইউজার সেশন থাকে কিন্তু ডেটাবেসে প্রোফাইল না থাকে, তবে প্রোফাইল তৈরি করা
+      // নতুন ইউজারের জন্য অটো-প্রোফাইল ক্রিয়েশন
       if (!user && id) {
-        console.log("Creating new user profile for:", cleanEmail);
         const { data: newUser, error: createError } = await this.supabase
           .from('users')
           .insert([{ 
@@ -114,7 +126,6 @@ export class DatabaseService {
           .single();
         
         if (!createError) user = newUser;
-        else console.error("Profile Creation Failed:", createError);
       }
       
       if (user) {
@@ -132,7 +143,7 @@ export class DatabaseService {
         };
       }
     } catch (e) {
-      console.error("Critical getUser Error:", e);
+      console.error("getUser error", e);
     }
     return null;
   }

@@ -2,25 +2,28 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   Send, Smartphone, Loader2, Zap, Cpu, LogOut, Check, Rocket,
-  Download, Globe, Activity, Terminal, ShieldAlert, Package, QrCode
+  Download, Globe, Activity, Terminal, ShieldAlert, Package, QrCode, AlertCircle, Key, Mail, ArrowLeft
 } from 'lucide-react';
 import { AppMode, ChatMessage, User as UserType } from './types';
 import { GeminiService } from './services/geminiService';
 import { DatabaseService } from './services/dbService';
 
+type AuthView = 'signin' | 'signup' | 'forgot' | 'update';
+
 const App: React.FC = () => {
   const db = DatabaseService.getInstance();
   const [user, setUser] = useState<UserType | null>(null);
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [isSignUp, setIsSignUp] = useState(false);
-  const [authInput, setAuthInput] = useState({ email: '', password: '' });
+  const [authView, setAuthView] = useState<AuthView>('signin');
+  const [authInput, setAuthInput] = useState({ email: '', password: '', newPassword: '' });
   const [isAuthLoading, setIsAuthLoading] = useState(true);
+  const [authStatus, setAuthStatus] = useState<{ type: 'success' | 'error', msg: string } | null>(null);
+  
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [mode, setMode] = useState<AppMode>(AppMode.PREVIEW);
   const [isGenerating, setIsGenerating] = useState(false);
   const [projectFiles, setProjectFiles] = useState<Record<string, string>>({
-    'index.html': '<html><body style="background:#020617;color:cyan;display:flex;align-items:center;justify-content:center;height:100vh;font-family:sans-serif;"><h1>DroidForge System Active</h1></body></html>',
+    'index.html': '<html><body style="background:#020617;color:cyan;display:flex;align-items:center;justify-content:center;height:100vh;font-family:sans-serif;margin:0;"><div><h1 style="text-align:center;">DroidForge System Active</h1><p style="opacity:0.5;font-size:12px;text-align:center;">READY FOR NEURAL UPLINK</p></div></body></html>',
     'styles.css': '',
     'main.js': ''
   });
@@ -29,93 +32,127 @@ const App: React.FC = () => {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
-  // Sync scroll on chat
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isGenerating]);
 
-  // Auth Management
+  // Auth Initialization & Logic
   useEffect(() => {
-    const loadUser = async (email: string, id?: string) => {
+    const loadUserData = async (email: string, id?: string) => {
+      console.log("Loading user data for:", email);
       const u = await db.getUser(email, id);
       if (u) {
         setUser(u);
-        setIsAdmin(!!u.isAdmin);
         if (messages.length === 0) {
           setMessages([{
             id: 'welcome',
             role: 'assistant',
-            content: `স্বাগতম ${u.name}! আমি DroidForge AI। আপনার অ্যাপ আইডিয়া দিন।`,
+            content: `স্বাগতম ${u.name}! আমি DroidForge AI। আজ আপনার জন্য কি অ্যাপ তৈরি করব?`,
             choices: [
-              { label: "কন্টাক্টস অ্যাপ বানান", prompt: "Build a native contacts manager" },
-              { label: "ফ্ল্যাশলাইট অ্যাপ", prompt: "Build a native flashlight controller" }
+              { label: "কন্টাক্টস ম্যানেজার", prompt: "Build a native contacts manager app" },
+              { label: "স্মার্ট লাইট কন্ট্রোলার", prompt: "Create a smart light controller with native sensors" }
             ],
             timestamp: Date.now()
           }]);
         }
       }
+      setIsAuthLoading(false);
     };
 
-    // ১. ইনিশিয়াল চেক
-    const initAuth = async () => {
+    const init = async () => {
       try {
         const session = await db.getCurrentSession();
         const forceEmail = localStorage.getItem('df_force_login');
-        const email = session?.user?.email || forceEmail;
+        
+        if (window.location.pathname === '/update-password' || window.location.hash.includes('type=recovery')) {
+          setAuthView('update');
+        }
 
+        const email = session?.user?.email || forceEmail;
         if (email) {
-          await loadUser(email, session?.user?.id);
+          await loadUserData(email, session?.user?.id);
+        } else {
+          // যদি URL-এ হ্যাশ থাকে (যেমন Google login-এর পর), তবে loading screen দেখাব যতক্ষণ না event ধরা পড়ে
+          if (!window.location.hash.includes('access_token')) {
+            setIsAuthLoading(false);
+          }
         }
       } catch (e) {
-        console.error("Auth initialization failed");
-      } finally {
-        // যদি ইউআরএল এ সেশন টোকেন থাকে, তবে লিসেনার হ্যান্ডেল করবে। 
-        // নাহলে লোডিং বন্ধ।
-        if (!window.location.hash.includes('access_token')) {
-          setIsAuthLoading(false);
-        }
+        setIsAuthLoading(false);
       }
     };
 
-    // ২. রিয়েল টাইম অথ লিসেনার (Google Login এর জন্য জরুরি)
     const { data: { subscription } } = db.onAuthStateChange(async (event, session) => {
-      console.log("Auth State Changed:", event);
-      if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session?.user?.email) {
-        await loadUser(session.user.email, session.user.id);
+      console.log("Supabase Auth Event:", event);
+      if (event === 'PASSWORD_RECOVERY') {
+        setAuthView('update');
         setIsAuthLoading(false);
+      } else if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION' || event === 'USER_UPDATED') && session?.user?.email) {
+        await loadUserData(session.user.email, session.user.id);
       } else if (event === 'SIGNED_OUT') {
         setUser(null);
-        setIsAdmin(false);
         setIsAuthLoading(false);
       }
     });
 
-    initAuth();
-
-    // সেফটি টাইমার (যদি সুপাবেস রেসপন্স না দেয়)
-    const timer = setTimeout(() => setIsAuthLoading(false), 4000);
+    init();
+    
+    // Safety timer: যদি ৬ সেকেন্ডেও সেশন লোড না হয় তবে লোডিং বন্ধ করে লগইন পেজ দেখাবে
+    const safetyTimer = setTimeout(() => {
+      setIsAuthLoading(false);
+    }, 6000);
 
     return () => {
       subscription.unsubscribe();
-      clearTimeout(timer);
+      clearTimeout(safetyTimer);
     };
   }, []);
 
-  const handleAuth = async (e: React.FormEvent) => {
+  const handleAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setAuthStatus(null);
     setIsAuthLoading(true);
-    const { email, password } = authInput;
-    
+
     try {
-      const { session, error } = isSignUp ? await db.signUp(email, password) : await db.signIn(email, password);
-      if (error) {
-        alert(error.message);
-        setIsAuthLoading(false);
-      } else if (session) {
-        // সাকসেসফুল লগইন লিসেনার এর মাধ্যমে হ্যান্ডেল হবে
+      if (authView === 'signin') {
+        const { error } = await db.signIn(authInput.email, authInput.password);
+        if (error) {
+          setAuthStatus({ type: 'error', msg: error.message });
+          setIsAuthLoading(false);
+        }
+      } else if (authView === 'signup') {
+        const { error } = await db.signUp(authInput.email, authInput.password);
+        if (error) {
+          setAuthStatus({ type: 'error', msg: error.message });
+          setIsAuthLoading(false);
+        } else {
+          setAuthStatus({ type: 'success', msg: 'Registration successful! Check your email.' });
+          setIsAuthLoading(false);
+        }
+      } else if (authView === 'forgot') {
+        const { error } = await db.resetPassword(authInput.email);
+        if (error) {
+          setAuthStatus({ type: 'error', msg: error.message });
+          setIsAuthLoading(false);
+        } else {
+          setAuthStatus({ type: 'success', msg: 'Password reset link sent to your email.' });
+          setIsAuthLoading(false);
+        }
+      } else if (authView === 'update') {
+        const { error } = await db.updatePassword(authInput.newPassword);
+        if (error) {
+          setAuthStatus({ type: 'error', msg: error.message });
+          setIsAuthLoading(false);
+        } else {
+          setAuthStatus({ type: 'success', msg: 'Password updated! Please login with your new password.' });
+          setTimeout(() => {
+            setAuthView('signin');
+            setIsAuthLoading(false);
+          }, 2000);
+        }
       }
     } catch (err) {
-      alert("System Busy.");
+      setAuthStatus({ type: 'error', msg: 'Critical system error.' });
       setIsAuthLoading(false);
     }
   };
@@ -136,36 +173,84 @@ const App: React.FC = () => {
   };
 
   if (isAuthLoading) return (
-    <div className="h-screen bg-[#020617] flex flex-col items-center justify-center font-['Plus_Jakarta_Sans']">
-      <div className="relative w-20 h-20 mb-6">
-        <Cpu size={60} className="text-cyan-500 animate-pulse absolute inset-0"/>
+    <div className="h-screen bg-[#020617] flex flex-col items-center justify-center">
+      <div className="relative w-16 h-16 mb-6">
+        <Cpu size={64} className="text-cyan-500 animate-pulse absolute inset-0"/>
         <div className="absolute inset-0 blur-xl bg-cyan-500/20 animate-pulse rounded-full"></div>
       </div>
-      <div className="text-cyan-500 font-black tracking-[0.4em] text-[10px] uppercase animate-pulse">Syncing Secure Core...</div>
+      <div className="text-cyan-500 font-black tracking-[0.4em] text-[10px] uppercase animate-pulse">Establishing Secure Uplink...</div>
     </div>
   );
 
   if (!user) return (
     <div className="h-screen bg-slate-950 flex items-center justify-center p-6 bg-grid font-['Plus_Jakarta_Sans']">
-      <div className="max-w-md w-full glass-card p-12 rounded-[4rem] border-cyan-500/20 text-center animate-in fade-in zoom-in-95 duration-500">
-        <div className="w-20 h-20 bg-cyan-500 rounded-2xl mx-auto flex items-center justify-center mb-8 shadow-2xl active-pulse"><Cpu size={40} className="text-black"/></div>
-        <h1 className="text-3xl font-black text-white uppercase tracking-tighter mb-4">DroidForge <span className="text-cyan-400">Pro</span></h1>
-        <p className="text-white/40 text-[10px] font-black uppercase tracking-[0.3em] mb-8">{isSignUp ? 'Registration Module' : 'System Authorization'}</p>
-        <form onSubmit={handleAuth} className="space-y-4">
-          <input required type="email" value={authInput.email} onChange={e => setAuthInput(p => ({...p, email: e.target.value}))} className="w-full bg-slate-900 border border-white/10 rounded-3xl p-5 text-white outline-none focus:border-cyan-500/50 transition-all" placeholder="Email Address" />
-          <input required type="password" value={authInput.password} onChange={e => setAuthInput(p => ({...p, password: e.target.value}))} className="w-full bg-slate-900 border border-white/10 rounded-3xl p-5 text-white outline-none focus:border-cyan-500/50 transition-all" placeholder="Security Token (Pass)" />
-          <button type="submit" className="w-full py-5 bg-cyan-600 rounded-3xl font-black uppercase tracking-widest text-white shadow-xl hover:bg-cyan-500 active:scale-95 transition-all mt-4">
-            {isSignUp ? 'Generate Account' : 'Initialize Core'}
+      <div className="max-w-md w-full glass-card p-10 rounded-[3rem] border-white/10 text-center animate-in fade-in zoom-in-95 duration-500 shadow-[0_0_80px_-20px_rgba(6,182,212,0.1)]">
+        <div className="w-16 h-16 bg-cyan-500 rounded-2xl mx-auto flex items-center justify-center mb-6 shadow-2xl active-pulse">
+          <Cpu size={32} className="text-black"/>
+        </div>
+        
+        <h1 className="text-2xl font-black text-white uppercase tracking-tighter mb-1">DroidForge <span className="text-cyan-400">Pro</span></h1>
+        <p className="text-white/30 text-[9px] font-black uppercase tracking-[0.3em] mb-8">
+          {authView === 'signin' ? 'Login' : 
+           authView === 'signup' ? 'Registration' : 
+           authView === 'forgot' ? 'Recovery Protocol' : 'Update Security Key'}
+        </p>
+
+        {authStatus && (
+          <div className={`mb-6 p-4 rounded-2xl flex items-center gap-3 text-xs font-bold animate-in slide-in-from-top-4 ${authStatus.type === 'error' ? 'bg-red-500/10 text-red-400 border border-red-500/20' : 'bg-green-500/10 text-green-400 border border-green-500/20'}`}>
+            <AlertCircle size={16}/> {authStatus.msg}
+          </div>
+        )}
+
+        <form onSubmit={handleAuthSubmit} className="space-y-4">
+          {authView !== 'update' && (
+            <div className="relative">
+              <Mail className="absolute left-5 top-1/2 -translate-y-1/2 text-white/20" size={18}/>
+              <input required type="email" value={authInput.email} onChange={e => setAuthInput(p => ({...p, email: e.target.value}))} className="w-full bg-slate-900/50 border border-white/5 rounded-2xl p-4 pl-14 text-white outline-none focus:border-cyan-500/30 transition-all text-sm" placeholder="Email Address" />
+            </div>
+          )}
+          
+          {(authView === 'signin' || authView === 'signup') && (
+            <div className="relative">
+              <Key className="absolute left-5 top-1/2 -translate-y-1/2 text-white/20" size={18}/>
+              <input required type="password" value={authInput.password} onChange={e => setAuthInput(p => ({...p, password: e.target.value}))} className="w-full bg-slate-900/50 border border-white/5 rounded-2xl p-4 pl-14 text-white outline-none focus:border-cyan-500/30 transition-all text-sm" placeholder="Security Password" />
+            </div>
+          )}
+
+          {authView === 'update' && (
+            <div className="relative">
+              <Key className="absolute left-5 top-1/2 -translate-y-1/2 text-white/20" size={18}/>
+              <input required type="password" value={authInput.newPassword} onChange={e => setAuthInput(p => ({...p, newPassword: e.target.value}))} className="w-full bg-slate-900/50 border border-white/5 rounded-2xl p-4 pl-14 text-white outline-none focus:border-cyan-500/30 transition-all text-sm" placeholder="New Password" />
+            </div>
+          )}
+
+          <button type="submit" disabled={isAuthLoading} className="w-full py-4 bg-cyan-600 rounded-2xl font-black uppercase tracking-widest text-white shadow-xl hover:bg-cyan-500 active:scale-95 transition-all flex items-center justify-center gap-2">
+            {isAuthLoading ? <Loader2 size={18} className="animate-spin"/> : (
+              authView === 'signin' ? 'Login' : 
+              authView === 'signup' ? 'Registration' : 
+              authView === 'forgot' ? 'Send Reset Link' : 'Update Password'
+            )}
           </button>
         </form>
-        <div className="mt-8 pt-8 border-t border-white/5 space-y-4">
-          <button onClick={() => db.loginWithGoogle()} className="w-full py-4 bg-white/5 border border-white/10 rounded-3xl text-sm font-bold flex items-center justify-center gap-3 hover:bg-white/10 transition-all">
-            <Globe size={18} className="text-cyan-400"/> Google Neural Link
-          </button>
-          <p className="text-white/30 text-[11px] font-medium tracking-wide">
-            {isSignUp ? 'Already have an ID?' : "Need a new access?"} 
-            <button onClick={() => setIsSignUp(!isSignUp)} className="ml-2 text-cyan-400 font-black hover:underline uppercase tracking-widest">{isSignUp ? 'Sign In' : 'Sign Up'}</button>
-          </p>
+
+        <div className="mt-8 space-y-4">
+          {authView === 'signin' && (
+            <>
+              <button onClick={() => db.loginWithGoogle()} className="w-full py-3 bg-white/5 border border-white/5 rounded-2xl text-[11px] font-black uppercase tracking-widest flex items-center justify-center gap-3 hover:bg-white/10 transition-all">
+                <Globe size={16} className="text-cyan-400"/> Login With Google
+              </button>
+              <div className="flex justify-between items-center px-2">
+                <button onClick={() => setAuthView('forgot')} className="text-white/20 text-[10px] font-bold hover:text-cyan-400 transition-colors uppercase tracking-widest">Forgot Password?</button>
+                <button onClick={() => setAuthView('signup')} className="text-cyan-400 text-[10px] font-black hover:underline uppercase tracking-widest">Registration</button>
+              </div>
+            </>
+          )}
+
+          {(authView === 'signup' || authView === 'forgot' || authView === 'update') && (
+            <button onClick={() => setAuthView('signin')} className="text-white/20 text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 mx-auto hover:text-white transition-colors">
+              <ArrowLeft size={12}/> Back to Login
+            </button>
+          )}
         </div>
       </div>
     </div>
