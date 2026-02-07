@@ -63,6 +63,7 @@ export class DatabaseService {
   }
 
   async loginWithGoogle() {
+    // Redirecting strictly to origin to ensure Supabase allow-list compatibility
     return await this.supabase.auth.signInWithOAuth({
       provider: 'google',
       options: { 
@@ -110,7 +111,6 @@ export class DatabaseService {
         .eq('email', cleanEmail)
         .maybeSingle();
       
-      // প্রোফাইল না থাকলে নতুন প্রোফাইল তৈরি (Social Login Support)
       if (!user && id) {
         const { data: newUser, error: createError } = await this.supabase
           .from('users')

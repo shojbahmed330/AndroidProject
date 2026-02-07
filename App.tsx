@@ -39,7 +39,7 @@ const App: React.FC = () => {
   // Auth Initialization & Logic
   useEffect(() => {
     const loadUserData = async (email: string, id?: string) => {
-      console.log("Establishing Uplink for:", email);
+      console.log("Synchronizing User Data...");
       const u = await db.getUser(email, id);
       if (u) {
         setUser(u);
@@ -47,7 +47,7 @@ const App: React.FC = () => {
           setMessages([{
             id: 'welcome',
             role: 'assistant',
-            content: `স্বাগতম ${u.name}! আমি DroidForge AI। আজ আপনার জন্য কি অ্যাপ তৈরি করব?`,
+            content: `স্বাগতম ${u.name}! আমি DroidForge AI। আজ আপনার জন্য কি অ্যাপ তৈরি করব? নিচের ইনপুট বক্সে আপনার আইডিয়া লিখুন।`,
             choices: [
               { label: "কন্টাক্টস ম্যানেজার", prompt: "Build a native contacts manager app" },
               { label: "স্মার্ট লাইট কন্ট্রোলার", prompt: "Create a smart light controller with native sensors" }
@@ -55,10 +55,14 @@ const App: React.FC = () => {
             timestamp: Date.now()
           }]);
         }
-        // সাকসেসফুলি ইউজার ডাটা লোড হলে URL ক্লিন করুন
+        // Success: Clear auth params from URL
         if (window.location.search.includes('code=') || window.location.hash.includes('access_token')) {
           window.history.replaceState({}, document.title, window.location.origin);
         }
+        setIsAuthLoading(false);
+      } else {
+        // Fallback: If user data couldn't be fetched, don't stay in loading forever
+        console.warn("User data fetch failed for:", email);
         setIsAuthLoading(false);
       }
     };
@@ -76,25 +80,23 @@ const App: React.FC = () => {
         if (email) {
           await loadUserData(email, session?.user?.id);
         } else {
-          // যদি URL-এ লগইন প্যারামিটার না থাকে তবেই লোডিং বন্ধ হবে
           const hasParams = window.location.search.includes('code=') || window.location.hash.includes('access_token');
           if (!hasParams) {
             setIsAuthLoading(false);
           }
         }
       } catch (e) {
-        console.error("Initialization error:", e);
+        console.error("Critical Init Failure:", e);
         setIsAuthLoading(false);
       }
     };
 
     const { data: { subscription } } = db.onAuthStateChange(async (event, session) => {
-      console.log("Auth State Changed:", event);
-      if (event === 'PASSWORD_RECOVERY') {
-        setAuthView('update');
-        setIsAuthLoading(false);
-      } else if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session?.user?.email) {
-        await loadUserData(session.user.email, session.user.id);
+      console.log("Auth Event:", event);
+      if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
+        if (session?.user?.email) {
+          await loadUserData(session.user.email, session.user.id);
+        }
       } else if (event === 'SIGNED_OUT') {
         setUser(null);
         setIsAuthLoading(false);
@@ -103,13 +105,11 @@ const App: React.FC = () => {
 
     init();
     
-    const safetyTimer = setTimeout(() => {
-      setIsAuthLoading(false);
-    }, 12000); // Google Login অনেক সময় দেরি করতে পারে তাই সময় একটু বাড়ানো হয়েছে
-
+    // Safety fallback
+    const safety = setTimeout(() => setIsAuthLoading(false), 8000);
     return () => {
       subscription.unsubscribe();
-      clearTimeout(safetyTimer);
+      clearTimeout(safety);
     };
   }, []);
 
@@ -143,18 +143,9 @@ const App: React.FC = () => {
           setAuthStatus({ type: 'success', msg: 'Recovery link sent.' });
           setIsAuthLoading(false);
         }
-      } else if (authView === 'update') {
-        const { error } = await db.updatePassword(authInput.newPassword);
-        if (error) {
-          setAuthStatus({ type: 'error', msg: error.message });
-          setIsAuthLoading(false);
-        } else {
-          setAuthStatus({ type: 'success', msg: 'Password updated. Redirecting...' });
-          setTimeout(() => setAuthView('signin'), 2000);
-        }
       }
     } catch (err) {
-      setAuthStatus({ type: 'error', msg: 'System Error.' });
+      setAuthStatus({ type: 'error', msg: 'System error during auth.' });
       setIsAuthLoading(false);
     }
   };
@@ -180,8 +171,7 @@ const App: React.FC = () => {
         <Cpu size={64} className="text-cyan-500 animate-pulse absolute inset-0"/>
         <div className="absolute inset-0 blur-xl bg-cyan-500/20 animate-pulse rounded-full"></div>
       </div>
-      <div className="text-cyan-500 font-black tracking-[0.4em] text-[10px] uppercase animate-pulse">Synchronizing Session...</div>
-      <p className="mt-4 text-white/10 text-[9px] uppercase tracking-widest">Validating Neural Link</p>
+      <div className="text-cyan-500 font-black tracking-[0.4em] text-[10px] uppercase animate-pulse">Establishing Connection...</div>
     </div>
   );
 
@@ -193,11 +183,7 @@ const App: React.FC = () => {
         </div>
         
         <h1 className="text-2xl font-black text-white uppercase tracking-tighter mb-1">DroidForge <span className="text-cyan-400">Pro</span></h1>
-        <p className="text-white/30 text-[9px] font-black uppercase tracking-[0.3em] mb-8">
-          {authView === 'signin' ? 'Login' : 
-           authView === 'signup' ? 'Registration' : 
-           authView === 'forgot' ? 'Recovery Protocol' : 'Update Security Key'}
-        </p>
+        <p className="text-white/30 text-[9px] font-black uppercase tracking-[0.3em] mb-8">{authView === 'signin' ? 'Login Portal' : 'Access Registration'}</p>
 
         {authStatus && (
           <div className={`mb-6 p-4 rounded-2xl flex items-center gap-3 text-xs font-bold animate-in slide-in-from-top-4 ${authStatus.type === 'error' ? 'bg-red-500/10 text-red-400 border border-red-500/20' : 'bg-green-500/10 text-green-400 border border-green-500/20'}`}>
@@ -206,54 +192,29 @@ const App: React.FC = () => {
         )}
 
         <form onSubmit={handleAuthSubmit} className="space-y-4">
-          {authView !== 'update' && (
-            <div className="relative">
-              <Mail className="absolute left-5 top-1/2 -translate-y-1/2 text-white/20" size={18}/>
-              <input required type="email" value={authInput.email} onChange={e => setAuthInput(p => ({...p, email: e.target.value}))} className="w-full bg-slate-900/50 border border-white/5 rounded-2xl p-4 pl-14 text-white outline-none focus:border-cyan-500/30 transition-all text-sm" placeholder="Email Address" />
-            </div>
-          )}
+          <div className="relative">
+            <Mail className="absolute left-5 top-1/2 -translate-y-1/2 text-white/20" size={18}/>
+            <input required type="email" value={authInput.email} onChange={e => setAuthInput(p => ({...p, email: e.target.value}))} className="w-full bg-slate-900/50 border border-white/5 rounded-2xl p-4 pl-14 text-white outline-none focus:border-cyan-500/30 transition-all text-sm" placeholder="Email Address" />
+          </div>
           
-          {(authView === 'signin' || authView === 'signup') && (
-            <div className="relative">
-              <Key className="absolute left-5 top-1/2 -translate-y-1/2 text-white/20" size={18}/>
-              <input required type="password" value={authInput.password} onChange={e => setAuthInput(p => ({...p, password: e.target.value}))} className="w-full bg-slate-900/50 border border-white/5 rounded-2xl p-4 pl-14 text-white outline-none focus:border-cyan-500/30 transition-all text-sm" placeholder="Security Password" />
-            </div>
-          )}
+          <div className="relative">
+            <Key className="absolute left-5 top-1/2 -translate-y-1/2 text-white/20" size={18}/>
+            <input required type="password" value={authInput.password} onChange={e => setAuthInput(p => ({...p, password: e.target.value}))} className="w-full bg-slate-900/50 border border-white/5 rounded-2xl p-4 pl-14 text-white outline-none focus:border-cyan-500/30 transition-all text-sm" placeholder="Password" />
+          </div>
 
-          {authView === 'update' && (
-            <div className="relative">
-              <Key className="absolute left-5 top-1/2 -translate-y-1/2 text-white/20" size={18}/>
-              <input required type="password" value={authInput.newPassword} onChange={e => setAuthInput(p => ({...p, newPassword: e.target.value}))} className="w-full bg-slate-900/50 border border-white/5 rounded-2xl p-4 pl-14 text-white outline-none focus:border-cyan-500/30 transition-all text-sm" placeholder="New Password" />
-            </div>
-          )}
-
-          <button type="submit" disabled={isAuthLoading} className="w-full py-4 bg-cyan-600 rounded-2xl font-black uppercase tracking-widest text-white shadow-xl hover:bg-cyan-500 active:scale-95 transition-all flex items-center justify-center gap-2">
-            {isAuthLoading ? <Loader2 size={18} className="animate-spin"/> : (
-              authView === 'signin' ? 'Login' : 
-              authView === 'signup' ? 'Registration' : 
-              authView === 'forgot' ? 'Send Reset Link' : 'Update Password'
-            )}
+          <button type="submit" disabled={isAuthLoading} className="w-full py-4 bg-cyan-600 rounded-2xl font-black uppercase tracking-widest text-white shadow-xl hover:bg-cyan-500 transition-all flex items-center justify-center gap-2">
+            {authView === 'signin' ? 'Login' : 'Register'}
           </button>
         </form>
 
         <div className="mt-8 space-y-4">
-          {authView === 'signin' && (
-            <>
-              <button onClick={() => db.loginWithGoogle()} className="w-full py-3 bg-white/5 border border-white/5 rounded-2xl text-[11px] font-black uppercase tracking-widest flex items-center justify-center gap-3 hover:bg-white/10 transition-all">
-                <Globe size={16} className="text-cyan-400"/> Login With Google
-              </button>
-              <div className="flex justify-between items-center px-2">
-                <button onClick={() => setAuthView('forgot')} className="text-white/20 text-[10px] font-bold hover:text-cyan-400 transition-colors uppercase tracking-widest">Forgot Password?</button>
-                <button onClick={() => setAuthView('signup')} className="text-cyan-400 text-[10px] font-black hover:underline uppercase tracking-widest">Registration</button>
-              </div>
-            </>
-          )}
-
-          {(authView === 'signup' || authView === 'forgot' || authView === 'update') && (
-            <button onClick={() => setAuthView('signin')} className="text-white/20 text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 mx-auto hover:text-white transition-colors">
-              <ArrowLeft size={12}/> Back to Login
-            </button>
-          )}
+          <button onClick={() => db.loginWithGoogle()} className="w-full py-3 bg-white/5 border border-white/5 rounded-2xl text-[11px] font-black uppercase tracking-widest flex items-center justify-center gap-3 hover:bg-white/10 transition-all">
+            <Globe size={16} className="text-cyan-400"/> Login With Google
+          </button>
+          <div className="flex justify-between items-center px-2">
+            <button onClick={() => setAuthView('signin')} className="text-white/20 text-[10px] font-black uppercase tracking-widest hover:text-white transition-colors">Login</button>
+            <button onClick={() => setAuthView('signup')} className="text-cyan-400 text-[10px] font-black hover:underline uppercase tracking-widest">Registration</button>
+          </div>
         </div>
       </div>
     </div>
