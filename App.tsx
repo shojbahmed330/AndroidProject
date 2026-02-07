@@ -22,7 +22,6 @@ const DEFAULT_USER: UserType = {
   joinedAt: Date.now()
 };
 
-// --- Scan Page Component (Biometric) ---
 const ScanPage: React.FC<{ onFinish: () => void }> = ({ onFinish }) => {
   const [isScanning, setIsScanning] = useState(false);
 
@@ -76,7 +75,6 @@ const ScanPage: React.FC<{ onFinish: () => void }> = ({ onFinish }) => {
   );
 };
 
-// --- Login Page Component (Auth Forms) ---
 const AuthPage: React.FC<{ onLoginSuccess: (user: UserType) => void, initialUpdateMode?: boolean }> = ({ onLoginSuccess, initialUpdateMode = false }) => {
   const [isRegister, setIsRegister] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
@@ -99,7 +97,7 @@ const AuthPage: React.FC<{ onLoginSuccess: (user: UserType) => void, initialUpda
     setIsLoading(true);
     try {
       const res = isRegister 
-        ? await db.signUp(formData.email, formData.password)
+        ? await db.signUp(formData.email, formData.password, formData.name)
         : await db.signIn(formData.email, formData.password);
       
       if (res.error) throw res.error;
@@ -314,7 +312,6 @@ const App: React.FC = () => {
         const userData = await db.getUser(session.user.email || '');
         if (userData && !isRecovery) {
           setUser(userData);
-          // ড্যাশবোর্ড রিডাইরেকশন নিশ্চিত করা
           if (path === '/login' || path === '/' || !path) {
             navigate('/dashboard');
           }
@@ -327,7 +324,6 @@ const App: React.FC = () => {
   }, [path]);
 
   const navigate = (to: string) => {
-    // blob: প্রোটোকল শনাক্ত করা
     const isBlobOrigin = window.location.protocol === 'blob:';
     
     try {
@@ -478,7 +474,6 @@ const App: React.FC = () => {
     else if (type === 'multiple') setSelectedOptions(prev => prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val]);
   };
 
-  // Auth/Routing Protection
   if (!user) {
     const isRecovery = path === '/update-password' || window.location.hash.includes('type=recovery');
     if (path === '/login' || isRecovery) {
@@ -487,10 +482,8 @@ const App: React.FC = () => {
     return <ScanPage onFinish={() => navigate('/login')} />;
   }
 
-  // Dashboard UI
   return (
     <div className="h-[100dvh] flex flex-col font-['Hind_Siliguri'] text-slate-100 bg-[#020617] overflow-hidden">
-      {/* Header */}
       <header className="h-auto min-h-[4rem] md:min-h-[5rem] border-b border-white/5 glass-card flex flex-col md:flex-row items-center justify-between px-4 md:px-8 py-2 md:py-0 z-50 gap-2 md:gap-0">
         <div className="flex items-center gap-4 w-full md:w-auto justify-between md:justify-start">
           <div onClick={handleLogoClick} className="flex items-center gap-3 cursor-pointer group select-none">

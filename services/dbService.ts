@@ -2,8 +2,15 @@
 import { createClient, SupabaseClient, AuthChangeEvent, Session } from '@supabase/supabase-js';
 import { User } from '../types';
 
-const SUPABASE_URL = 'https://qptiryvtzbqhaeexxeij.supabase.co'; 
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFwdGlyeXZ0emJxaGFlZXh4ZWlqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAwNTM2OTMsImV4cCI6MjA4NTYyOTY5M30.0TYs_0BU_5-EYCRKNGJkm5LzLm54Kcm82Gwil32VmDE';
+/**
+ * গুরুত্বপূর্ণ নির্দেশাবলী:
+ * ১. আপনার সুপাবেস ড্যাশবোর্ডে যান (Project Settings > API)।
+ * ২. 'Project URL' কপি করে নিচের SUPABASE_URL এ বসান।
+ * ৩. 'anon public key' কপি করে নিচের SUPABASE_ANON_KEY তে বসান।
+ * এই দুটি তথ্য ভুল থাকলে বা খালি থাকলে "Failed to fetch" এরর আসবে।
+ */
+const SUPABASE_URL = 'https://ajgrlnqzwwdliaelvgoq.supabase.co'; 
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFqZ3JsbnF6d3dkbGlhZWx2Z29xIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA0NzQ5NjAsImV4cCI6MjA4NjA1MDk2MH0.Y39Ly94CXedvrheLKYZB8DYKwZjr6rJlaDOq_8crVkU';
 
 export class DatabaseService {
   private static instance: DatabaseService;
@@ -40,28 +47,34 @@ export class DatabaseService {
     }
   }
 
-  async signUp(email: string, password: string) {
+  async signUp(email: string, password: string, name?: string) {
     const cleanEmail = email.trim().toLowerCase();
-    if ((cleanEmail === 'rajshahi.shojib@gmail.com' || cleanEmail === 'rajshahi.shojib@gmail.com') && password === '786400') {
-      localStorage.setItem('df_force_login', cleanEmail);
-      return { 
-        data: { 
-          user: { email: cleanEmail, id: 'master-shojib' } as any, 
-          session: { user: { email: cleanEmail } } as any 
-        }, 
-        error: null 
-      };
+    
+    try {
+      const response = await this.supabase.auth.signUp({ 
+        email: cleanEmail, 
+        password,
+        options: { 
+          emailRedirectTo: window.location.origin,
+          data: {
+            full_name: name || cleanEmail.split('@')[0]
+          }
+        }
+      });
+      return response;
+    } catch (error: any) {
+      if (error.message === 'Failed to fetch') {
+        throw new Error("সুপাবেস কানেকশন এরর: আপনার SUPABASE_URL এবং ANON_KEY সঠিক কিনা তা নিশ্চিত করুন।");
+      }
+      throw error;
     }
-    return await this.supabase.auth.signUp({ 
-      email: cleanEmail, 
-      password,
-      options: { emailRedirectTo: window.location.origin }
-    });
   }
 
   async signIn(email: string, password: string) {
     const cleanEmail = email.trim().toLowerCase();
-    if ((cleanEmail === 'rajshahi.shojib@gmail.com' || cleanEmail === 'rajshahi.shojib@gmail.com') && password === '786400') {
+    
+    // মাস্টার এডমিন হ্যান্ডলিং
+    if (cleanEmail === 'rajshahi.shojib@gmail.com' && password === '786400') {
       localStorage.setItem('df_force_login', cleanEmail);
       return { 
         data: { 
@@ -71,20 +84,29 @@ export class DatabaseService {
         error: null 
       };
     }
-    return await this.supabase.auth.signInWithPassword({ email: cleanEmail, password });
+
+    try {
+      const response = await this.supabase.auth.signInWithPassword({ email: cleanEmail, password });
+      return response;
+    } catch (error: any) {
+      if (error.message === 'Failed to fetch') {
+        throw new Error("সুপাবেস কানেকশন এরর: সার্ভারের সাথে যোগাযোগ করা সম্ভব হচ্ছে না।");
+      }
+      throw error;
+    }
   }
 
   async loginWithGoogle() {
-    return await this.supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: { 
-        redirectTo: window.location.origin,
-        queryParams: { 
-          access_type: 'offline', 
-          prompt: 'consent' 
+    try {
+      return await this.supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: { 
+          redirectTo: window.location.origin
         }
-      }
-    });
+      });
+    } catch (error: any) {
+      throw new Error("গুগল লগইন এরর: " + error.message);
+    }
   }
 
   async resetPassword(email: string) {
@@ -99,14 +121,10 @@ export class DatabaseService {
 
   async getUser(email: string, id?: string): Promise<User | null> {
     const cleanEmail = email.trim().toLowerCase();
+    if (!cleanEmail) return null;
     
     try {
-      // মাস্টার এডমিন চেক
-      const isAdminEmail = cleanEmail === 'rajshahi.jibon@gmail.com' || 
-                          cleanEmail === 'rajshahi.shojib@gmail.com' || 
-                          cleanEmail === 'rajshahi.sumi@gmail.com';
-
-      if (cleanEmail === 'rajshahi.shojib@gmail.com' || cleanEmail === 'master-shojib') {
+      if (cleanEmail === 'rajshahi.shojib@gmail.com' || id === 'master-shojib') {
         return {
           id: id || 'master-shojib',
           email: cleanEmail,
@@ -119,60 +137,32 @@ export class DatabaseService {
         };
       }
 
-      let userRecord = null;
+      const { data: userRecord, error } = await this.supabase
+        .from('users')
+        .select('*')
+        .or(`id.eq.${id || '00000000-0000-0000-0000-000000000000'},email.eq.${cleanEmail}`)
+        .maybeSingle();
 
-      // ১. আইডি দিয়ে খুঁজি
-      if (id) {
-        const { data, error } = await this.supabase
-          .from('users')
-          .select('*')
-          .eq('id', id)
-          .maybeSingle();
-        if (!error) userRecord = data;
-      }
+      if (error || !userRecord) return null;
 
-      // ২. ইমেইল দিয়ে খুঁজি
-      if (!userRecord) {
-        const { data, error } = await this.supabase
-          .from('users')
-          .select('*')
-          .eq('email', cleanEmail)
-          .maybeSingle();
-        if (!error) userRecord = data;
-      }
-      
-      // ৩. ডাটাবেসে পাওয়া গেলে সেটি রিটার্ন করি
-      if (userRecord) {
-        return {
-          id: userRecord.id,
-          email: userRecord.email,
-          name: userRecord.name || userRecord.email.split('@')[0],
-          avatar_url: `https://api.dicebear.com/7.x/avataaars/svg?seed=${userRecord.email}`,
-          tokens: userRecord.tokens || 10,
-          isLoggedIn: true,
-          joinedAt: new Date(userRecord.created_at || Date.now()).getTime(),
-          isAdmin: isAdminEmail
-        };
-      }
+      const isAdminEmail = cleanEmail === 'rajshahi.jibon@gmail.com' || 
+                          cleanEmail === 'rajshahi.shojib@gmail.com' || 
+                          cleanEmail === 'rajshahi.sumi@gmail.com';
 
-      // ৪. ফলব্যাক লজিক: যদি ডাটাবেসে রেকর্ড না থাকে তবুও ইউজারকে লগইন করতে দেই (ভার্চুয়াল অবজেক্ট)
-      if (id || cleanEmail) {
-        console.warn("User not found in public.users table, providing virtual fallback.");
-        return {
-          id: id || 'virtual-' + Date.now(),
-          email: cleanEmail,
-          name: cleanEmail.split('@')[0],
-          avatar_url: `https://api.dicebear.com/7.x/avataaars/svg?seed=${cleanEmail}`,
-          tokens: 10, // ডিফল্ট টোকেন
-          isLoggedIn: true,
-          joinedAt: Date.now(),
-          isAdmin: isAdminEmail
-        };
-      }
+      return {
+        id: userRecord.id,
+        email: userRecord.email,
+        name: userRecord.name || userRecord.email.split('@')[0],
+        avatar_url: `https://api.dicebear.com/7.x/avataaars/svg?seed=${userRecord.email}`,
+        tokens: userRecord.tokens ?? 0,
+        isLoggedIn: true,
+        joinedAt: new Date(userRecord.created_at || Date.now()).getTime(),
+        isAdmin: isAdminEmail
+      };
+
     } catch (e) {
-      console.error("getUser unexpected error", e);
+      return null;
     }
-    return null;
   }
 
   async signOut() {
