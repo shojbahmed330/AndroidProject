@@ -245,22 +245,23 @@ const App: React.FC = () => {
         }
         db.getTokenPackages().then(setTokenPackages);
       } catch (err) {
-        console.error("Initialization error:", err);
+        console.error("Init Error:", err);
       } finally {
-        // Critical: Set initialized to true so loader disappears
         setIsInitialized(true);
       }
     };
     init();
 
+    // সেশন চেঞ্জ লিসেনার আরও ফাস্ট করা হলো
     const { data: { subscription } } = db.onAuthStateChange(async (event, session) => {
-      if (event === 'SIGNED_IN' && session?.user) {
+      if (session?.user) {
+        // ইউজারের ডেটা আসার আগেই initialized ট্রু করে দেওয়া হচ্ছে যাতে লোডার থামে
+        setIsInitialized(true);
         const userData = await db.getUser(session.user.email || '', session.user.id);
         if (userData) {
           setUser(userData);
           db.getProjects(userData.id).then(setProjects);
         }
-        setIsInitialized(true);
       } else if (event === 'SIGNED_OUT') {
         setUser(null);
         setProjects([]);
@@ -351,7 +352,7 @@ const App: React.FC = () => {
   if (!isInitialized) return (
     <div className="h-screen w-screen bg-[#020617] flex flex-col items-center justify-center gap-6">
       <Loader2 className="animate-spin text-cyan-400" size={50}/>
-      <p className="text-cyan-400 text-xs font-black uppercase tracking-[0.3em] animate-pulse">Syncing Neural Link...</p>
+      <p className="text-cyan-400 text-[10px] font-black uppercase tracking-[0.4em] animate-pulse">Neural Link Establishing...</p>
     </div>
   );
 
