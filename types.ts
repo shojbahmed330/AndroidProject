@@ -4,7 +4,8 @@ export enum AppMode {
   PREVIEW = 'PREVIEW',
   SHOP = 'SHOP',
   PROFILE = 'PROFILE',
-  SETTINGS = 'SETTINGS'
+  SETTINGS = 'SETTINGS',
+  PROJECTS = 'PROJECTS'
 }
 
 export interface GithubConfig {
@@ -38,4 +39,22 @@ export interface User {
   isLoggedIn: boolean;
   joinedAt: number;
   isAdmin?: boolean;
+}
+
+export interface Project {
+  id: string;
+  user_id: string;
+  name: string;
+  files: Record<string, string>;
+  messages: ChatMessage[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TokenPackage {
+  id: string;
+  name: string;
+  token_count: number;
+  price_bdt: number;
+  is_popular: boolean;
 }
