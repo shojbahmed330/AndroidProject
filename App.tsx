@@ -231,8 +231,7 @@ const App: React.FC = () => {
           const userData = await db.getUser(forcedEmail, 'master-shojib');
           if (userData) {
             setUser(userData);
-            const userProjects = await db.getProjects(userData.id);
-            setProjects(userProjects);
+            db.getProjects(userData.id).then(setProjects);
           }
         } else {
           const session = await db.getCurrentSession();
@@ -240,16 +239,15 @@ const App: React.FC = () => {
             const userData = await db.getUser(session.user.email || '', session.user.id);
             if (userData) {
               setUser(userData);
-              const userProjects = await db.getProjects(userData.id);
-              setProjects(userProjects);
+              db.getProjects(userData.id).then(setProjects);
             }
           }
         }
-        const packages = await db.getTokenPackages();
-        setTokenPackages(packages);
+        db.getTokenPackages().then(setTokenPackages);
       } catch (err) {
         console.error("Initialization error:", err);
       } finally {
+        // Critical: Set initialized to true so loader disappears
         setIsInitialized(true);
       }
     };
@@ -260,12 +258,13 @@ const App: React.FC = () => {
         const userData = await db.getUser(session.user.email || '', session.user.id);
         if (userData) {
           setUser(userData);
-          const userProjects = await db.getProjects(userData.id);
-          setProjects(userProjects);
+          db.getProjects(userData.id).then(setProjects);
         }
+        setIsInitialized(true);
       } else if (event === 'SIGNED_OUT') {
         setUser(null);
         setProjects([]);
+        setIsInitialized(true);
       }
     });
 
@@ -349,7 +348,12 @@ const App: React.FC = () => {
     setUser(DEFAULT_USER);
   };
 
-  if (!isInitialized) return <div className="h-screen w-screen bg-[#020617] flex items-center justify-center"><Loader2 className="animate-spin text-cyan-400" size={40}/></div>;
+  if (!isInitialized) return (
+    <div className="h-screen w-screen bg-[#020617] flex flex-col items-center justify-center gap-6">
+      <Loader2 className="animate-spin text-cyan-400" size={50}/>
+      <p className="text-cyan-400 text-xs font-black uppercase tracking-[0.3em] animate-pulse">Syncing Neural Link...</p>
+    </div>
+  );
 
   if (!user) return <ScanPage onFinish={handleFinishScan} />;
   
