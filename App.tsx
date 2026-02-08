@@ -252,16 +252,15 @@ const App: React.FC = () => {
     };
     init();
 
-    // সেশন চেঞ্জ লিসেনার আরও ফাস্ট করা হলো
     const { data: { subscription } } = db.onAuthStateChange(async (event, session) => {
       if (session?.user) {
-        // ইউজারের ডেটা আসার আগেই initialized ট্রু করে দেওয়া হচ্ছে যাতে লোডার থামে
-        setIsInitialized(true);
         const userData = await db.getUser(session.user.email || '', session.user.id);
         if (userData) {
           setUser(userData);
           db.getProjects(userData.id).then(setProjects);
         }
+        // সেশন পাওয়া গেলে এবং ইউজার ডেটা সেট হওয়ার পরেই লোডার বন্ধ হবে
+        setIsInitialized(true);
       } else if (event === 'SIGNED_OUT') {
         setUser(null);
         setProjects([]);
@@ -356,7 +355,10 @@ const App: React.FC = () => {
     </div>
   );
 
-  if (!user) return <ScanPage onFinish={handleFinishScan} />;
+  // যদি ইউজার সেশন থাকে (অর্থাৎ ইউজার লগইন করা), তবে সরাসরি ড্যাশবোর্ড দেখাবে
+  if (!user || (!user.isLoggedIn && user.id !== 'dev-mode')) {
+    return <ScanPage onFinish={handleFinishScan} />;
+  }
   
   if (user.id === 'dev-mode' && !user.isLoggedIn) return <AuthPage onLoginSuccess={handleLoginSuccess} />;
 
