@@ -223,7 +223,17 @@ const App: React.FC = () => {
   const activeProject = projects.find(p => p.id === activeProjectId);
   const projectFiles = activeProject?.files || { 'index.html': '<h1>Select or create a project to start</h1>' };
 
+  // অথেনটিকেশন চেক করার জন্য আরও শক্তিশালী লজিক
   useEffect(() => {
+    const handleUserData = async (sessionUser: any) => {
+      if (!sessionUser) return;
+      const userData = await db.getUser(sessionUser.email || '', sessionUser.id);
+      if (userData) {
+        setUser(userData);
+        db.getProjects(userData.id).then(setProjects);
+      }
+    };
+
     const init = async () => {
       try {
         const forcedEmail = localStorage.getItem('df_force_login');
@@ -236,17 +246,14 @@ const App: React.FC = () => {
         } else {
           const session = await db.getCurrentSession();
           if (session?.user) {
-            const userData = await db.getUser(session.user.email || '', session.user.id);
-            if (userData) {
-              setUser(userData);
-              db.getProjects(userData.id).then(setProjects);
-            }
+            await handleUserData(session.user);
           }
         }
         db.getTokenPackages().then(setTokenPackages);
       } catch (err) {
         console.error("Init Error:", err);
       } finally {
+        // ক্রটিক্যাল: যে কোনো অবস্থাতেই লোডার সরাতে হবে
         setIsInitialized(true);
       }
     };
@@ -254,12 +261,7 @@ const App: React.FC = () => {
 
     const { data: { subscription } } = db.onAuthStateChange(async (event, session) => {
       if (session?.user) {
-        const userData = await db.getUser(session.user.email || '', session.user.id);
-        if (userData) {
-          setUser(userData);
-          db.getProjects(userData.id).then(setProjects);
-        }
-        // সেশন পাওয়া গেলে এবং ইউজার ডেটা সেট হওয়ার পরেই লোডার বন্ধ হবে
+        await handleUserData(session.user);
         setIsInitialized(true);
       } else if (event === 'SIGNED_OUT') {
         setUser(null);
@@ -355,7 +357,7 @@ const App: React.FC = () => {
     </div>
   );
 
-  // যদি ইউজার সেশন থাকে (অর্থাৎ ইউজার লগইন করা), তবে সরাসরি ড্যাশবোর্ড দেখাবে
+  // সেশন থাকলেই ড্যাশবোর্ডে ঢুকতে দেবে
   if (!user || (!user.isLoggedIn && user.id !== 'dev-mode')) {
     return <ScanPage onFinish={handleFinishScan} />;
   }
